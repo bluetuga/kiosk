@@ -105,7 +105,10 @@ lb config \
   --apt-secure true \
   --initsystem systemd \
   --memtest none \
-  --source false
+  --source false \
+  --mirror-bootstrap http://deb.debian.org/debian \
+  --mirror-binary http://deb.debian.org/debian \
+  --mirror-security http://security.debian.org/debian-security
 EOF
 chmod +x config/auto/config
 
