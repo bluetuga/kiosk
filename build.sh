@@ -105,10 +105,6 @@ lb config \
   --apt-secure true \
   --initsystem systemd \
   --memtest none \
-  --iso-name cercifaf-kiosk-amd64 \
-  --iso-application "CERCIFAF Kiosk" \
-  --iso-publisher "CERCIFAF" \
-  --iso-volume "CERCIFAF-KIOSK" \
   --source false
 EOF
 chmod +x config/auto/config
