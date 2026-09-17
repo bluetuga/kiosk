@@ -97,9 +97,6 @@ lb config \
   --architectures amd64 \
   --binary-images iso-hybrid \
   --bootloader grub-efi,grub-pc \
-  --debian-installer live \
-  --debian-installer-gui true \
-  --debian-installer-distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
   --apt-recommends false \
   --apt-secure true \
@@ -109,8 +106,7 @@ lb config \
   --mirror-bootstrap http://deb.debian.org/debian \
   --mirror-binary http://deb.debian.org/debian \
   --security false \
-  --apt-indices false \
-  --firmware-chroot false
+  --apt-indices false
 EOF
 chmod +x config/auto/config
 
