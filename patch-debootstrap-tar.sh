@@ -465,6 +465,6 @@ PYEOF
 
 echo "Debootstrap patched successfully"
 
-# Test that /workspace is writable
-touch /workspace/test_patch_ran
-echo "Patch script ran successfully" > /workspace/patch_test.log
+# Test that current directory is writable
+touch test_patch_ran
+echo "Patch script ran successfully" > patch_test.log
