@@ -96,7 +96,7 @@ lb config \
   --distribution trixie \
   --architectures amd64 \
   --binary-images iso-hybrid \
-  --bootloaders grub-efi,grub-pc \
+  --bootloader grub-efi,grub-pc \
   --debian-installer live \
   --debian-installer-gui true \
   --debian-installer-distribution trixie \
@@ -105,12 +105,11 @@ lb config \
   --apt-secure true \
   --initsystem systemd \
   --memtest none \
-  --image-name cercifaf-kiosk-amd64 \
+  --iso-name cercifaf-kiosk-amd64 \
   --iso-application "CERCIFAF Kiosk" \
   --iso-publisher "CERCIFAF" \
   --iso-volume "CERCIFAF-KIOSK" \
-  --source false \
-  --updates true
+  --source false
 EOF
 chmod +x config/auto/config
 
