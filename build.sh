@@ -108,9 +108,21 @@ lb config \
   --source false \
   --mirror-bootstrap http://deb.debian.org/debian \
   --mirror-binary http://deb.debian.org/debian \
-  --security true
+  --security false
 EOF
 chmod +x config/auto/config
+
+# Hook to fix security repository in sources.list (Debian 13 uses debian-security suite)
+mkdir -p config/hooks/chroot
+cat > config/hooks/chroot/99-fix-security-repo.hook.chroot <<'EOF'
+#!/bin/bash
+set -e
+# Replace old security repo with correct Debian 13 security repo
+sed -i 's|http://security.debian.org trixie/updates|http://security.debian.org/debian-security trixie-security|g' /etc/apt/sources.list
+sed -i 's|http://security.debian.org/debian-security trixie/updates|http://security.debian.org/debian-security trixie-security|g' /etc/apt/sources.list
+apt-get update
+EOF
+chmod +x config/hooks/chroot/99-fix-security-repo.hook.chroot
 
 # Getty autologin
 mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
