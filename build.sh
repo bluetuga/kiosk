@@ -97,6 +97,7 @@ lb config \
   --architectures amd64 \
   --binary-images iso-hybrid \
   --bootloader grub-efi,grub-pc \
+  --debian-installer false \
   --archive-areas "main contrib non-free non-free-firmware" \
   --apt-recommends false \
   --apt-secure true \
@@ -121,17 +122,6 @@ sed -i 's|http://security.debian.org/debian-security trixie/updates|http://secur
 apt-get update
 EOF
 chmod +x config/hooks/chroot/99-fix-security-repo.hook.chroot
-
-# Binary hook to skip Contents file download (Debian 13 doesn't have Contents-amd64.gz at old path)
-mkdir -p config/hooks/binary
-cat > config/hooks/binary/99-skip-contents.hook.binary <<'EOF'
-#!/bin/bash
-set -e
-# Skip Contents file download by creating empty index
-echo "Skipping Contents file download"
-exit 0
-EOF
-chmod +x config/hooks/binary/99-skip-contents.hook.binary
 
 # Getty autologin
 mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
