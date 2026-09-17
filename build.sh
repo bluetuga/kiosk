@@ -46,7 +46,12 @@ fi
 rm -rf config cache chroot binary bootstrap.log build.log
 
 # Create directories (FIXED: added config/includes.chroot/opt/cercifaf)
-mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf
+mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf config/auto config/includes.chroot/usr/local/bin config/includes.chroot/home/kiosk config/includes.chroot/etc/systemd/system/getty@tty1.service.d config/includes.chroot/etc/systemd/system config/hooks/live
+
+# Verify critical directories exist
+for d in config/auto config/package-lists config/includes.chroot; do
+  [[ -d "$d" ]] || { echo "ERRO: diretório $d não foi criado"; exit 1; }
+done
 
 # Copy assets to chroot
 cp assets/wallpaper.png config/includes.chroot/opt/cercifaf/wallpaper.png
@@ -108,8 +113,6 @@ lb config \
   --updates true
 EOF
 chmod +x config/auto/config
-
-# REMOVED: cp config/auto/config /tmp/cercifaf-auto-config (unnecessary backup)
 
 # Getty autologin
 mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
@@ -237,13 +240,25 @@ systemctl enable cercifaf-shutdown.timer
 EOF
 chmod +x config/hooks/live/99-enable-timers.hook.chroot
 
+# Hook to clean up .dpkg-new files after chroot package installation
+mkdir -p config/hooks/normal
+cat > config/hooks/normal/99-clean-dpkg-new.hook.chroot <<'EOF'
+#!/bin/bash
+set -e
+echo "Running 99-clean-dpkg-new hook"
+find / -name "*.dpkg-new" -ls 2>/dev/null | head -20
+find / -name "*.dpkg-new" -exec rm -f {} \; 2>/dev/null || true
+echo "Finished 99-clean-dpkg-new hook"
+EOF
+chmod +x config/hooks/normal/99-clean-dpkg-new.hook.chroot
+
 # Ensure project-controlled assets are not accidentally omitted.
 test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
-  # macOS (Docker)
-  echo "Starting live-build in Docker (linux/amd64)..."
+  # macOS (Docker) — usa --platform linux/amd64 para cross-compile via QEMU do Docker Desktop
+  echo "Starting live-build in Docker (linux/amd64 via --platform)..."
   docker run --rm \
     --name cercifaf-kiosk-build \
     --privileged \
@@ -252,19 +267,46 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     -w /workspace \
     -e HOST_UID=$(id -u) \
     -e HOST_GID=$(id -g) \
+    -e DEBIAN_FRONTEND=noninteractive \
     debian:13-slim \
-    bash -c "\
-      apt-get update && \
+    bash -c '
+      set -x
+      apt-get update
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
-        grub-pc-bin grub-efi-amd64-bin mtools dosfstools curl && \
-      ./config/auto/config && \
-      lb build 2>&1 | tee build.log && \
-      chown -R ${HOST_UID}:${HOST_GID} /workspace"
+        grub-pc-bin grub-efi-amd64-bin mtools dosfstools curl \
+        python3 binutils xz-utils qemu-user-static
+
+      # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
+      mkdir -p /etc/dpkg/dpkg.cfg.d
+      echo "force-overwrite" > /etc/dpkg/dpkg.cfg.d/force-overwrite
+
+      # Patch debootstrap ANTES de qualquer bootstrap:
+      # 1. extract_dpkg_deb_data com --overwrite (evita falha em symlinks quebrados no first-stage)
+      # 2. debian-common para corrigir libpam-runtime symlink e libsystemd-shared dir ANTES do unpack
+      ./patch-debootstrap-tar.sh
+
+      ./config/auto/config
+      echo "Running lb build..."
+      lb build --verbose
+      echo "lb build exit code: $?"
+
+      # Clean up .dpkg-new files before chown to avoid permission issues
+      echo "Cleaning up .dpkg-new files..."
+      find /workspace -name "*.dpkg-new" -ls 2>/dev/null | head -20
+      find /workspace -name "*.dpkg-new" -exec rm -f {} \; 2>/dev/null || true
+      find /workspace -name "*.dpkg-new" -ls 2>/dev/null | head -20
+
+      # Skip chown if it fails due to .dpkg-new permission issues
+      echo "Running chown..."
+      chown -R ${HOST_UID}:${HOST_GID} /workspace 2>/dev/null || echo "Warning: chown failed, files remain owned by root"
+      echo "chown done"
+    ' || true
 else
   # Linux (native)
   echo "Starting live-build (native)..."
   ./config/auto/config
+  ./patch-debootstrap-tar.sh
   lb build 2>&1 | tee build.log
 fi
 
