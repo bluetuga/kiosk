@@ -106,8 +106,10 @@ lb config \
   --source false \
   --mirror-bootstrap http://deb.debian.org/debian \
   --mirror-binary http://deb.debian.org/debian \
+  --mirror-chroot http://deb.debian.org/debian \
   --security false \
-  --apt-indices false
+  --apt-indices false \
+  --firmware-binary false
 EOF
 chmod +x config/auto/config
 
