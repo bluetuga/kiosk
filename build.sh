@@ -381,33 +381,39 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
-      # Install syslinux (pulls syslinux-common and installs binaries)
-      # The binaries are needed for /root/isolinux/ during postinst
-      apt-get install -y --no-install-recommends syslinux syslinux-utils
-      # Find where syslinux installed the files
+      # Install syslinux packages (syslinux installs binaries on Debian/Ubuntu)
+      apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
+      # Find where the files were installed (varies by distro)
       SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
       if [ -z "$SYSLINUX_DIR" ]; then
-        # Fallback: check common locations
-        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX; do
+        # Check all common locations
+        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios; do
           if [ -f "$d/isolinux.bin" ]; then
             SYSLINUX_DIR="$d"
             break
           fi
         done
       fi
-      echo "Found syslinux files in: $SYSLINUX_DIR"
+      echo "Found syslinux files in: ${SYSLINUX_DIR:-NOT_FOUND}"
       if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-        echo "ERROR: isolinux.bin not found after installing syslinux"
-        find /usr -name "isolinux*" 2>/dev/null | head -20
+        echo "ERROR: isolinux.bin not found after installing syslinux packages"
+        echo "Searching for isolinux* files:"
+        find /usr -name "isolinux*" -type f 2>/dev/null | head -30
+        echo "Searching for syslinux directories:"
+        find /usr -type d -name "*syslinux*" 2>/dev/null | head -20
         exit 1
       fi
       # Setup syslinux files for live-build binary stage
       mkdir -p /root/isolinux
       cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/
-      cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/
-      cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/
-      cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/
-      cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/
+      cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
+      cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
+      cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
+      cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
+      # Also copy from /usr/lib/syslinux/modules/bios if that's where c32 files are
+      if [ -d /usr/lib/syslinux/modules/bios ]; then
+        cp /usr/lib/syslinux/modules/bios/*.c32 /root/isolinux/ 2>/dev/null || true
+      fi
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
