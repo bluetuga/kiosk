@@ -18,33 +18,16 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install syslinux packages for isohybrid
-          sudo apt-get install -y --no-install-recommends syslinux syslinux-utils
           # Install live-build and other tools
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
-            curl python3 binutils xz-utils
+            curl python3 binutils xz-utils syslinux syslinux-utils
           # Verify isohybrid is available (provided by syslinux-utils)
           echo "Checking isohybrid..."
           which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
           isohybrid --version
           echo "isohybrid OK"
-          # Download syslinux BIOS files from Debian (Ubuntu 24.04 syslinux lacks isolinux.bin)
-          # Using Debian 13 (trixie) syslinux-common package contents
-          mkdir -p /tmp/syslinux-download
-          cd /tmp/syslinux-download
-          curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
-          dpkg-deb -x syslinux-common.deb .
-          # Copy isolinux files to where live-build expects them
-          sudo mkdir -p /root/isolinux
-          sudo cp usr/lib/syslinux/bios/isolinux.bin /root/isolinux/
-          sudo cp usr/lib/syslinux/bios/vesamenu.c32 /root/isolinux/
-          sudo cp usr/lib/syslinux/bios/libcom32.c32 /root/isolinux/
-          sudo cp usr/lib/syslinux/bios/libutil.c32 /root/isolinux/
-          sudo cp usr/lib/syslinux/bios/menu.c32 /root/isolinux/
-          echo "Downloaded syslinux BIOS files to /root/isolinux/"
-          ls -la /root/isolinux/
 
       - name: Build ISO
         run: |
