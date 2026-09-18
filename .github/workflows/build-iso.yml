@@ -21,8 +21,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             grub-pc-bin grub-efi-amd64-bin mtools dosfstools \
-            syslinux-utils \
+            syslinux-utils syslinux \
             curl python3 binutils xz-utils
+          # Verify isohybrid is available
+          which isohybrid || (echo "isohybrid not found!" && exit 1)
+          isohybrid --version
 
       - name: Build ISO
         run: |

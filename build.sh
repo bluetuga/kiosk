@@ -293,8 +293,11 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
         grub-pc-bin grub-efi-amd64-bin mtools dosfstools \
-        syslinux-utils \
+        syslinux-utils syslinux \
         curl python3 binutils xz-utils qemu-user-static
+      # Verify isohybrid is available
+      which isohybrid || (echo "isohybrid not found!" && exit 1)
+      isohybrid --version
 
       # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
       mkdir -p /etc/dpkg/dpkg.cfg.d
