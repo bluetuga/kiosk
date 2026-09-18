@@ -30,6 +30,29 @@ download() {
   curl --fail --location --retry 3 --connect-timeout 15 --output "$dest" "$url"
 }
 
+# Setup syslinux files for live-build binary stage
+# live-build's binary_syslinux looks for files in /root/isolinux/
+setup_syslinux_files() {
+  echo "Setting up syslinux files for live-build..."
+  mkdir -p /usr/lib/syslinux
+  # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
+  ln -sf /usr/lib/syslinux /root/isolinux
+  # Also ensure files are in /usr/lib/syslinux
+  for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+    if [ ! -f "/usr/lib/syslinux/$f" ]; then
+      for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
+        if [ -f "$src" ]; then
+          cp "$src" /usr/lib/syslinux/
+          break
+        fi
+      done
+    fi
+  done
+  echo "Syslinux files setup complete"
+  ls -la /usr/lib/syslinux/
+  ls -la /root/isolinux/
+}
+
 rm -f assets/wallpaper.png assets/screensaver.webm assets/screensaver.mp4
 
 download "https://cercifaf.org.pt/kiosk/wallpapers/wallpaper.png" "assets/wallpaper.png"
@@ -365,28 +388,6 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       # Verify isohybrid is available (provided by syslinux-utils)
       which isohybrid || (echo "isohybrid not found!" && exit 1)
       isohybrid --version
-
-      # Setup syslinux files function (for Docker container)
-      setup_syslinux_files() {
-          echo "Setting up syslinux files for live-build..."
-          mkdir -p /usr/lib/syslinux
-          # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
-          ln -sf /usr/lib/syslinux /root/isolinux
-          # Also ensure files are in /usr/lib/syslinux
-          for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-              if [ ! -f "/usr/lib/syslinux/$f" ]; then
-                  for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
-                      if [ -f "$src" ]; then
-                          cp "$src" /usr/lib/syslinux/
-                          break
-                      fi
-                  done
-              fi
-          done
-          echo "Syslinux files setup complete"
-          ls -la /usr/lib/syslinux/
-          ls -la /root/isolinux/
-      }
 
       # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
       mkdir -p /etc/dpkg/dpkg.cfg.d
