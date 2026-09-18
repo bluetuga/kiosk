@@ -78,17 +78,31 @@ jobs:
           fi
 
           # NOW setup syslinux files AFTER all packages installed
+          # syslinux 6.x: use isohdpfx.bin as isolinux.bin (for live-build binary_syslinux)
+          # AND copy ldlinux.sys (the actual bootloader) - BOTH required for iso-hybrid boot
           sudo mkdir -p /usr/lib/syslinux
-          # Copy isolinux.bin or equivalent
-          if [ -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/isolinux.bin /usr/lib/syslinux/
-          elif [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
+
+          # Copy isohdpfx.bin as isolinux.bin (required by live-build's binary_syslinux)
+          if [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
             sudo cp "$SYSLINUX_DIR"/isohdpfx.bin /usr/lib/syslinux/isolinux.bin
-          elif [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
-            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /usr/lib/syslinux/isolinux.bin
-          elif [ -f "$SYSLINUX_DIR/syslinux.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/syslinux.bin /usr/lib/syslinux/isolinux.bin
+            echo "Copied isohdpfx.bin -> /usr/lib/syslinux/isolinux.bin"
+          elif [ -f "$SYSLINUX_DIR/isolinux.bin" ]; then
+            sudo cp "$SYSLINUX_DIR"/isolinux.bin /usr/lib/syslinux/
+            echo "Copied isolinux.bin"
+          else
+            echo "ERROR: Neither isohdpfx.bin nor isolinux.bin found in $SYSLINUX_DIR"
+            exit 1
           fi
+
+          # Copy ldlinux.sys (syslinux 6.x bootloader) - REQUIRED for boot
+          if [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
+            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /usr/lib/syslinux/
+            echo "Copied ldlinux.sys"
+          else
+            echo "WARNING: ldlinux.sys not found in $SYSLINUX_DIR, boot may fail"
+          fi
+
+          # Copy COM32 modules
           sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp "$SYSLINUX_DIR"/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp "$SYSLINUX_DIR"/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
@@ -101,19 +115,12 @@ jobs:
           sudo ln -sf /usr/lib/syslinux /root/isolinux
 
           # Also copy to /root/isolinux for binary_syslinux
-          if [ -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/ 2>/dev/null || true
-          elif [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/isohdpfx.bin /root/isolinux/isolinux.bin 2>/dev/null || true
-          elif [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
-            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /root/isolinux/isolinux.bin 2>/dev/null || true
-          elif [ -f "$SYSLINUX_DIR/syslinux.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/syslinux.bin /root/isolinux/isolinux.bin 2>/dev/null || true
-          fi
-          sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/isolinux.bin /root/isolinux/isolinux.bin 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/ldlinux.sys /root/isolinux/ 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/libcom32.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/libutil.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp /usr/lib/syslinux/menu.c32 /root/isolinux/ 2>/dev/null || true
 
           echo "Syslinux files setup complete"
           ls -la /usr/lib/syslinux/
