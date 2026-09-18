@@ -381,9 +381,10 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
-      # Install syslinux-common first (provides isolinux.bin, vesamenu.c32)
-      apt-get install -y --no-install-recommends syslinux-common
-      # Find where syslinux-common installed the files (varies by distro)
+      # Install syslinux (pulls syslinux-common and installs binaries)
+      # The binaries are needed for /root/isolinux/ during postinst
+      apt-get install -y --no-install-recommends syslinux syslinux-utils
+      # Find where syslinux installed the files
       SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
       if [ -z "$SYSLINUX_DIR" ]; then
         # Fallback: check common locations
@@ -396,12 +397,11 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       fi
       echo "Found syslinux files in: $SYSLINUX_DIR"
       if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-        echo "ERROR: isolinux.bin not found after installing syslinux-common"
+        echo "ERROR: isolinux.bin not found after installing syslinux"
         find /usr -name "isolinux*" 2>/dev/null | head -20
         exit 1
       fi
-      # Setup syslinux files BEFORE installing syslinux package
-      # (syslinux postinst tries to access /root/isolinux/)
+      # Setup syslinux files for live-build binary stage
       mkdir -p /root/isolinux
       cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/
       cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/
@@ -411,7 +411,7 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
-        syslinux syslinux-utils mtools dosfstools \
+        mtools dosfstools \
         curl python3 binutils xz-utils qemu-user-static
       # Verify isohybrid is available (provided by syslinux-utils)
       which isohybrid || (echo "isohybrid not found!" && exit 1)
