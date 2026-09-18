@@ -273,6 +273,51 @@ test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 mkdir -p cache/binary_debian-installer
 echo "dummy" | gzip > cache/binary_debian-installer/Contents-amd64.gz
 
+# Binary hook to set up syslinux files for live-build
+# live-build expects isolinux files in /usr/lib/syslinux/ or similar
+mkdir -p config/hooks/binary
+cat > config/hooks/binary/99-setup-syslinux.hook.binary <<'EOF'
+#!/bin/bash
+set -e
+# Copy syslinux files to where live-build expects them for iso-hybrid
+# live-build's binary_syslinux script looks for these files
+mkdir -p /usr/lib/syslinux
+# Ensure isolinux.bin and vesamenu.c32 are available
+if [ -f /usr/lib/syslinux/isolinux.bin ]; then
+    echo "isolinux.bin already in place"
+else
+    # Try to find and copy from common locations
+    for src in /usr/share/syslinux/isolinux.bin /usr/lib/ISOLINUX/isolinux.bin; do
+        if [ -f "$src" ]; then
+            cp "$src" /usr/lib/syslinux/
+            break
+        fi
+    done
+fi
+if [ -f /usr/lib/syslinux/vesamenu.c32 ]; then
+    echo "vesamenu.c32 already in place"
+else
+    for src in /usr/share/syslinux/vesamenu.c32 /usr/lib/ISOLINUX/vesamenu.c32; do
+        if [ -f "$src" ]; then
+            cp "$src" /usr/lib/syslinux/
+            break
+        fi
+    done
+fi
+# Also copy other needed modules
+for f in libcom32.c32 libutil.c32 menu.c32; do
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
+        if [ -f "$src" ]; then
+            cp "$src" /usr/lib/syslinux/
+            break
+        fi
+    done
+done
+echo "Syslinux files setup complete"
+ls -la /usr/lib/syslinux/
+EOF
+chmod +x config/hooks/binary/99-setup-syslinux.hook.binary
+
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
   # macOS (Docker) — usa --platform linux/amd64 para cross-compile via QEMU do Docker Desktop
