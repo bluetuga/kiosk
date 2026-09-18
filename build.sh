@@ -30,29 +30,6 @@ download() {
   curl --fail --location --retry 3 --connect-timeout 15 --output "$dest" "$url"
 }
 
-# Setup syslinux files for live-build binary stage
-# live-build's binary_syslinux looks for files in /root/isolinux/
-setup_syslinux_files() {
-  echo "Setting up syslinux files for live-build..."
-  mkdir -p /usr/lib/syslinux
-  # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
-  ln -sf /usr/lib/syslinux /root/isolinux
-  # Also ensure files are in /usr/lib/syslinux
-  for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-    if [ ! -f "/usr/lib/syslinux/$f" ]; then
-      for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
-        if [ -f "$src" ]; then
-          cp "$src" /usr/lib/syslinux/
-          break
-        fi
-      done
-    fi
-  done
-  echo "Syslinux files setup complete"
-  ls -la /usr/lib/syslinux/
-  ls -la /root/isolinux/
-}
-
 rm -f assets/wallpaper.png assets/screensaver.webm assets/screensaver.mp4
 
 download "https://cercifaf.org.pt/kiosk/wallpapers/wallpaper.png" "assets/wallpaper.png"
@@ -69,7 +46,7 @@ fi
 rm -rf config cache chroot binary bootstrap.log build.log
 
 # Create directories (FIXED: added config/includes.chroot/opt/cercifaf)
-mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf config/auto config/includes.chroot/usr/local/bin config/includes.chroot/home/kiosk config/includes.chroot/etc/systemd/system/getty@tty1.service.d config/includes.chroot/etc/systemd/system config/hooks/live
+mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf config/auto config/includes.chroot/usr/local/bin config/includes.chroot/home/kiosk config/includes.chroot/etc/systemd/system/getty@tty1.service.d config/includes.chroot/etc/systemd/system config/hooks/live config/hooks/chroot
 
 # Verify critical directories exist
 for d in config/auto config/package-lists config/includes.chroot; do
@@ -149,6 +126,33 @@ sed -i 's|http://security.debian.org/debian-security trixie/updates|http://secur
 apt-get update
 EOF
 chmod +x config/hooks/chroot/99-fix-security-repo.hook.chroot
+
+# Hook to set up syslinux files during chroot phase (runs in both native and Docker)
+# This ensures isolinux.bin and modules are available for binary_syslinux later
+mkdir -p config/hooks/chroot
+cat > config/hooks/chroot/99-setup-syslinux.hook.chroot <<'EOF'
+#!/bin/bash
+set -e
+echo "Setting up syslinux files in chroot..."
+mkdir -p /usr/lib/syslinux
+# Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
+ln -sf /usr/lib/syslinux /root/isolinux
+# Copy syslinux files from installed packages to where live-build expects them
+for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+  if [ ! -f "/usr/lib/syslinux/$f" ]; then
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
+      if [ -f "$src" ]; then
+        cp "$src" /usr/lib/syslinux/
+        break
+      fi
+    done
+  fi
+done
+echo "Syslinux files setup complete"
+ls -la /usr/lib/syslinux/
+ls -la /root/isolinux/
+EOF
+chmod +x config/hooks/chroot/99-setup-syslinux.hook.chroot
 
 # Getty autologin
 mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
@@ -296,74 +300,6 @@ test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 mkdir -p cache/binary_debian-installer
 echo "dummy" | gzip > cache/binary_debian-installer/Contents-amd64.gz
 
-# Binary hook to set up syslinux files for live-build
-# live-build expects isolinux files in /usr/lib/syslinux/ or similar
-mkdir -p config/hooks/binary
-cat > config/hooks/binary/99-setup-syslinux.hook.binary <<'EOF'
-#!/bin/bash
-set -e
-# Copy syslinux files to where live-build expects them for iso-hybrid
-# live-build's binary_syslinux script looks for these files
-mkdir -p /usr/lib/syslinux
-# Ensure isolinux.bin and vesamenu.c32 are available
-if [ -f /usr/lib/syslinux/isolinux.bin ]; then
-    echo "isolinux.bin already in place"
-else
-    # Try to find and copy from common locations
-    for src in /usr/share/syslinux/isolinux.bin /usr/lib/ISOLINUX/isolinux.bin; do
-        if [ -f "$src" ]; then
-            cp "$src" /usr/lib/syslinux/
-            break
-        fi
-    done
-fi
-if [ -f /usr/lib/syslinux/vesamenu.c32 ]; then
-    echo "vesamenu.c32 already in place"
-else
-    for src in /usr/share/syslinux/vesamenu.c32 /usr/lib/ISOLINUX/vesamenu.c32; do
-        if [ -f "$src" ]; then
-            cp "$src" /usr/lib/syslinux/
-            break
-        fi
-    done
-fi
-# Also copy other needed modules
-for f in libcom32.c32 libutil.c32 menu.c32; do
-    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
-        if [ -f "$src" ]; then
-            cp "$src" /usr/lib/syslinux/
-            break
-        fi
-    done
-done
-echo "Syslinux files setup complete"
-ls -la /usr/lib/syslinux/
-EOF
-chmod +x config/hooks/binary/99-setup-syslinux.hook.binary
-
-# Pre-build syslinux setup (runs BEFORE lb build, since binary hook runs too late)
-# live-build's binary_syslinux tries to copy from /root/isolinux/ which doesn't exist
-setup_syslinux_files() {
-    echo "Setting up syslinux files for live-build..."
-    mkdir -p /usr/lib/syslinux
-    # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
-    ln -sf /usr/lib/syslinux /root/isolinux
-    # Also ensure files are in /usr/lib/syslinux
-    for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-        if [ ! -f "/usr/lib/syslinux/$f" ]; then
-            for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
-                if [ -f "$src" ]; then
-                    cp "$src" /usr/lib/syslinux/
-                    break
-                fi
-            done
-        fi
-    done
-    echo "Syslinux files setup complete"
-    ls -la /usr/lib/syslinux/
-    ls -la /root/isolinux/
-}
-
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
   # macOS (Docker) — usa --platform linux/amd64 para cross-compile via QEMU do Docker Desktop
@@ -383,34 +319,6 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       apt-get update
       # Install syslinux packages for isohybrid (Debian 13 has isolinux.bin in syslinux-common)
       apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
-      # Find where the files were installed (Debian 13 puts them in /usr/lib/syslinux/bios/)
-      SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
-      if [ -z "$SYSLINUX_DIR" ]; then
-        # Check all common locations
-        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
-          if [ -f "$d/isolinux.bin" ]; then
-            SYSLINUX_DIR="$d"
-            break
-          fi
-        done
-      fi
-      echo "Found syslinux files in: ${SYSLINUX_DIR:-NOT_FOUND}"
-      if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-        echo "ERROR: isolinux.bin not found, downloading from Debian repo..."
-        mkdir -p /tmp/syslinux-download
-        cd /tmp/syslinux-download
-        curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
-        dpkg-deb -x syslinux-common.deb .
-        SYSLINUX_DIR="usr/lib/syslinux/bios"
-        echo "Downloaded syslinux BIOS files to $SYSLINUX_DIR"
-      fi
-      # Setup syslinux files for live-build binary stage
-      mkdir -p /root/isolinux
-      cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/
-      cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-      cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-      cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
-      cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
@@ -446,7 +354,7 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       echo "chown done"
     ' || true
 else
-  # Linux (native) - syslinux files already set up by workflow before package install
+  # Linux (native) - syslinux files set up by chroot hook during lb build
   echo "Starting live-build (native)..."
   # Verify isohybrid is available (needed for iso-hybrid binary stage)
   which isohybrid || (echo "isohybrid not found! Install syslinux-utils" && exit 1)
