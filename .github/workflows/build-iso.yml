@@ -82,7 +82,7 @@ jobs:
 
           echo "Syslinux files setup complete"
           ls -la /usr/lib/syslinux/
-          ls -la /root/isolinux/
+          sudo ls -la /root/isolinux/
 
       - name: Build ISO
         run: |
