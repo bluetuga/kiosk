@@ -263,6 +263,17 @@ echo "Finished 99-clean-dpkg-new hook"
 EOF
 chmod +x config/hooks/normal/99-clean-dpkg-new.hook.chroot
 
+# Hook to create dummy Contents file (avoids 404 on debian.org for live-build)
+mkdir -p config/hooks/binary
+cat > config/hooks/binary/99-create-contents.hook.binary <<'EOF'
+#!/bin/bash
+set -e
+# Create minimal Contents-amd64.gz to satisfy live-build's search for kernel
+mkdir -p cache/binary_debian-installer
+echo "dummy" | gzip > cache/binary_debian-installer/Contents-amd64.gz
+EOF
+chmod +x config/hooks/binary/99-create-contents.hook.binary
+
 # Ensure project-controlled assets are not accidentally omitted.
 test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 
