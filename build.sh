@@ -111,7 +111,7 @@ lb config \
   --apt-indices false \
   --firmware-chroot false \
   --firmware-binary false \
-  --linux-packages linux-image-amd64
+  --linux-packages linux-image
 EOF
 chmod +x config/auto/config
 
