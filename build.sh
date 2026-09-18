@@ -46,7 +46,7 @@ fi
 rm -rf config cache chroot binary bootstrap.log build.log
 
 # Create directories (FIXED: added config/includes.chroot/opt/cercifaf)
-mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf config/auto config/includes.chroot/usr/local/bin config/includes.chroot/home/kiosk config/includes.chroot/etc/systemd/system/getty@tty1.service.d config/includes.chroot/etc/systemd/system config/hooks/live config/hooks/chroot
+mkdir -p config/package-lists config/includes.chroot config/hooks/live config/includes.binary output config/includes.chroot/opt/cercifaf config/auto config/includes.chroot/usr/local/bin config/includes.chroot/home/kiosk config/includes.chroot/etc/systemd/system/getty@tty1.service.d config/includes.chroot/etc/systemd/system config/hooks/live config/hooks/chroot config/hooks/binary config/includes.chroot/etc/plymouth/themes/cercifaf
 
 # Verify critical directories exist
 for d in config/auto config/package-lists config/includes.chroot; do
@@ -154,6 +154,30 @@ ls -la /root/isolinux/
 EOF
 chmod +x config/hooks/chroot/99-setup-syslinux.hook.chroot
 
+# Binary hook to ensure syslinux files are in place for binary_syslinux stage
+# This runs during the binary phase, before iso creation
+mkdir -p config/hooks/binary
+cat > config/hooks/binary/99-ensure-syslinux.hook.binary <<'EOF'
+#!/bin/bash
+set -e
+echo "Ensuring syslinux files for binary stage..."
+mkdir -p /usr/lib/syslinux
+ln -sf /usr/lib/syslinux /root/isolinux
+for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+  if [ ! -f "/usr/lib/syslinux/$f" ]; then
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
+      if [ -f "$src" ]; then
+        cp "$src" /usr/lib/syslinux/
+        break
+      fi
+    done
+  fi
+done
+ls -la /usr/lib/syslinux/
+ls -la /root/isolinux/
+EOF
+chmod +x config/hooks/binary/99-ensure-syslinux.hook.binary
+
 # Getty autologin
 mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
 cat > config/includes.chroot/etc/systemd/system/getty@tty1.service.d/override.conf <<'EOF'
@@ -181,11 +205,125 @@ export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-exec /usr/bin/cage -d -- /usr/local/bin/cercifaf-browser
+# Start swayidle for screensaver management
+exec /usr/local/bin/cercifaf-screensaver-manager
 EOF
 chmod +x config/includes.chroot/usr/local/bin/cercifaf-kiosk-session
 
-# Browser launcher
+# Screensaver manager - manages swayidle + mpv for screensaver
+cat > config/includes.chroot/usr/local/bin/cercifaf-screensaver-manager <<'EOF'
+#!/bin/sh
+set -eu
+
+SCREENSAVER_WEBM="/opt/cercifaf/screensaver.webm"
+SCREENSAVER_MP4="/opt/cercifaf/screensaver.mp4"
+URL="https://cercifaf.org.pt/"
+
+# Find screensaver file
+if [ -f "$SCREENSAVER_WEBM" ]; then
+    SCREENSAVER_FILE="$SCREENSAVER_WEBM"
+elif [ -f "$SCREENSAVER_MP4" ]; then
+    SCREENSAVER_FILE="$SCREENSAVER_MP4"
+else
+    echo "No screensaver file found, disabling screensaver"
+    SCREENSAVER_FILE=""
+fi
+
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+
+# Function to launch browser
+launch_browser() {
+    PROFILE="/tmp/cercifaf-chromium-$$"
+    rm -rf "$PROFILE"
+    mkdir -p "$PROFILE"
+    exec /usr/bin/chromium \
+        --kiosk \
+        --no-first-run \
+        --no-default-browser-check \
+        --disable-session-crashed-bubble \
+        --disable-infobars \
+        --disable-translate \
+        --disable-features=Translate,MediaRouter \
+        --password-store=basic \
+        --disk-cache-dir=/tmp/cercifaf-chromium-cache \
+        --user-data-dir="$PROFILE" \
+        "$URL"
+}
+
+# Function to launch screensaver (mpv loop)
+launch_screensaver() {
+    if [ -n "$SCREENSAVER_FILE" ]; then
+        exec /usr/bin/mpv --loop=inf --fullscreen --no-input-default-bindings --no-osc --no-terminal "$SCREENSAVER_FILE"
+    fi
+}
+
+# Start swayidle to manage idle detection
+# After 300s (5 min): stop chromium, start mpv
+# On activity: stop mpv, restart chromium
+if [ -n "$SCREENSAVER_FILE" ]; then
+    /usr/bin/swayidle -w \
+        timeout 300 '/usr/local/bin/cercifaf-screensaver-activate' \
+        resume '/usr/local/bin/cercifaf-screensaver-deactivate' \
+        before-sleep '/usr/local/bin/cercifaf-screensaver-activate' &
+    SWAYIDLE_PID=$!
+fi
+
+# Launch initial browser
+launch_browser
+
+# If swayidle was started, wait for it (should not return unless error)
+if [ -n "${SWAYIDLE_PID:-}" ]; then
+    wait $SWAYIDLE_PID
+fi
+EOF
+chmod +x config/includes.chroot/usr/local/bin/cercifaf-screensaver-manager
+
+# Screensaver activate - called by swayidle on idle timeout
+cat > config/includes.chroot/usr/local/bin/cercifaf-screensaver-activate <<'EOF'
+#!/bin/sh
+set -eu
+
+# Kill chromium to free resources
+pkill -f "chromium.*--kiosk" 2>/dev/null || true
+
+# Start mpv screensaver
+SCREENSAVER_WEBM="/opt/cercifaf/screensaver.webm"
+SCREENSAVER_MP4="/opt/cercifaf/screensaver.mp4"
+
+if [ -f "$SCREENSAVER_WEBM" ]; then
+    SCREENSAVER_FILE="$SCREENSAVER_WEBM"
+elif [ -f "$SCREENSAVER_MP4" ]; then
+    SCREENSAVER_FILE="$SCREENSAVER_MP4"
+else
+    exit 0
+fi
+
+# Launch mpv in background, store PID
+/usr/bin/mpv --loop=inf --fullscreen --no-input-default-bindings --no-osc --no-terminal "$SCREENSAVER_FILE" &
+echo $! > /tmp/cercifaf-mpv.pid
+EOF
+chmod +x config/includes.chroot/usr/local/bin/cercifaf-screensaver-activate
+
+# Screensaver deactivate - called by swayidle on activity resume
+cat > config/includes.chroot/usr/local/bin/cercifaf-screensaver-deactivate <<'EOF'
+#!/bin/sh
+set -eu
+
+# Kill mpv screensaver
+if [ -f /tmp/cercifaf-mpv.pid ]; then
+    kill "$(cat /tmp/cercifaf-mpv.pid)" 2>/dev/null || true
+    rm -f /tmp/cercifaf-mpv.pid
+fi
+pkill -f "mpv.*--loop=inf" 2>/dev/null || true
+
+# Relaunch chromium (fresh session)
+/usr/local/bin/cercifaf-kiosk-session &
+EOF
+chmod +x config/includes.chroot/usr/local/bin/cercifaf-screensaver-deactivate
+
+# Browser launcher (used by cercifaf-kiosk-session for initial launch)
 cat > config/includes.chroot/usr/local/bin/cercifaf-browser <<'EOF'
 #!/bin/sh
 set -eu
@@ -291,6 +429,73 @@ find / -name "*.dpkg-new" -exec rm -f {} \; 2>/dev/null || true
 echo "Finished 99-clean-dpkg-new hook"
 EOF
 chmod +x config/hooks/normal/99-clean-dpkg-new.hook.chroot
+
+# Hook to configure locale and timezone
+mkdir -p config/hooks/chroot
+cat > config/hooks/chroot/99-locale-timezone.hook.chroot <<'EOF'
+#!/bin/bash
+set -e
+# Set timezone to Europe/Lisbon
+ln -sf /usr/share/zoneinfo/Europe/Lisbon /etc/localtime
+echo "Europe/Lisbon" > /etc/timezone
+dpkg-reconfigure -f noninteractive tzdata
+
+# Set locale to pt_PT.UTF-8
+sed -i 's/^# *pt_PT.UTF-8/pt_PT.UTF-8/' /etc/locale.gen
+locale-gen
+update-locale LANG=pt_PT.UTF-8 LC_ALL=pt_PT.UTF-8
+EOF
+chmod +x config/hooks/chroot/99-locale-timezone.hook.chroot
+
+# Plymouth theme for CERCIFAF
+mkdir -p config/includes.chroot/etc/plymouth/themes/cercifaf
+cat > config/includes.chroot/etc/plymouth/themes/cercifaf/cercifaf.plymouth <<'EOF'
+[Plymouth Theme]
+Name=CERCIFAF
+Description=CERCIFAF Kiosk Theme
+ModuleName=script
+
+[script]
+ImageDir=/opt/cercifaf
+ScriptFile=/opt/cercifaf/cercifaf.script
+EOF
+
+cat > config/includes.chroot/opt/cercifaf/cercifaf.script <<'EOF'
+# CERCIFAF Plymouth theme script
+wallpaper = Image("wallpaper.png");
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# Scale wallpaper to fill screen maintaining aspect ratio
+img_width = wallpaper.GetWidth();
+img_height = wallpaper.GetHeight();
+
+if (img_width / screen_width > img_height / screen_height) {
+    scale = screen_width / img_width;
+} else {
+    scale = screen_height / img_height;
+}
+
+new_width = img_width * scale;
+new_height = img_height * scale;
+
+wallpaper_scaled = wallpaper.Scale(new_width, new_height);
+
+x = (screen_width - new_width) / 2;
+y = (screen_height - new_height) / 2;
+
+sprite = Sprite();
+sprite.SetImage(wallpaper_scaled);
+sprite.SetPosition(x, y, -100);
+EOF
+
+# Set plymouth theme to cercifaf
+mkdir -p config/includes.chroot/etc/plymouth
+cat > config/includes.chroot/etc/plymouth/plymouthd.conf <<'EOF'
+[Daemon]
+Theme=cercifaf
+ShowDelay=0
+EOF
 
 # Ensure project-controlled assets are not accidentally omitted.
 test -f config/includes.chroot/opt/cercifaf/wallpaper.png
