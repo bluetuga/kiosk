@@ -381,6 +381,9 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
+      # Setup syslinux files BEFORE installing syslinux package
+      # (syslinux postinst tries to access /root/isolinux/)
+      setup_syslinux_files
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
         syslinux syslinux-utils mtools dosfstools \
@@ -399,8 +402,6 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       ./patch-debootstrap-tar.sh
 
       ./config/auto/config
-      # Setup syslinux files BEFORE lb build (binary_syslinux needs /root/isolinux/)
-      setup_syslinux_files
       echo "Running lb build..."
       lb build --verbose
       echo "lb build exit code: $?"
@@ -417,15 +418,13 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       echo "chown done"
     ' || true
 else
-  # Linux (native)
+  # Linux (native) - syslinux files already set up by workflow before package install
   echo "Starting live-build (native)..."
   # Verify isohybrid is available (needed for iso-hybrid binary stage)
   which isohybrid || (echo "isohybrid not found! Install syslinux-utils" && exit 1)
   isohybrid --version
   ./config/auto/config
   ./patch-debootstrap-tar.sh
-  # Setup syslinux files BEFORE lb build (binary_syslinux needs /root/isolinux/)
-  setup_syslinux_files
   lb build 2>&1 | tee build.log
 fi
 
