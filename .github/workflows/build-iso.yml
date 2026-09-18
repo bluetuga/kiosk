@@ -24,8 +24,10 @@ jobs:
             syslinux-utils syslinux \
             curl python3 binutils xz-utils
           # Verify isohybrid is available
-          which isohybrid || (echo "isohybrid not found!" && exit 1)
+          echo "Checking isohybrid..."
+          which isohybrid || (echo "isohybrid not found in PATH" && ls -la /usr/bin/isohybrid 2>/dev/null || true && exit 1)
           isohybrid --version
+          echo "isohybrid OK"
 
       - name: Build ISO
         run: |
