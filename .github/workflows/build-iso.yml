@@ -18,40 +18,9 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install syslinux packages (syslinux installs binaries on Ubuntu 24.04)
-          sudo apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
-          # Find where the files were installed (Ubuntu 24.04 may put them in different locations)
-          SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
-          if [ -z "$SYSLINUX_DIR" ]; then
-            # Check all common locations
-            for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios; do
-              if [ -f "$d/isolinux.bin" ]; then
-                SYSLINUX_DIR="$d"
-                break
-              fi
-            done
-          fi
-          echo "Found syslinux files in: ${SYSLINUX_DIR:-NOT_FOUND}"
-          if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-            echo "ERROR: isolinux.bin not found after installing syslinux packages"
-            echo "Searching for isolinux* files:"
-            find /usr -name "isolinux*" -type f 2>/dev/null | head -30
-            echo "Searching for syslinux directories:"
-            find /usr -type d -name "*syslinux*" 2>/dev/null | head -20
-            exit 1
-          fi
-          # Setup syslinux files for live-build binary stage
-          sudo mkdir -p /root/isolinux
-          sudo cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/
-          sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
-          # Also copy from /usr/lib/syslinux/modules/bios if that's where c32 files are
-          if [ -d /usr/lib/syslinux/modules/bios ]; then
-            sudo cp /usr/lib/syslinux/modules/bios/*.c32 /root/isolinux/ 2>/dev/null || true
-          fi
-          # Now install remaining packages
+          # Install syslinux packages for isohybrid
+          sudo apt-get install -y --no-install-recommends syslinux syslinux-utils
+          # Install live-build and other tools
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -61,6 +30,21 @@ jobs:
           which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
           isohybrid --version
           echo "isohybrid OK"
+          # Download syslinux BIOS files from Debian (Ubuntu 24.04 syslinux lacks isolinux.bin)
+          # Using Debian 13 (trixie) syslinux-common package contents
+          mkdir -p /tmp/syslinux-download
+          cd /tmp/syslinux-download
+          curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
+          dpkg-deb -x syslinux-common.deb .
+          # Copy isolinux files to where live-build expects them
+          sudo mkdir -p /root/isolinux
+          sudo cp usr/lib/syslinux/bios/isolinux.bin /root/isolinux/
+          sudo cp usr/lib/syslinux/bios/vesamenu.c32 /root/isolinux/
+          sudo cp usr/lib/syslinux/bios/libcom32.c32 /root/isolinux/
+          sudo cp usr/lib/syslinux/bios/libutil.c32 /root/isolinux/
+          sudo cp usr/lib/syslinux/bios/menu.c32 /root/isolinux/
+          echo "Downloaded syslinux BIOS files to /root/isolinux/"
+          ls -la /root/isolinux/
 
       - name: Build ISO
         run: |

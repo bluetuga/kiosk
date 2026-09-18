@@ -381,13 +381,13 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
-      # Install syslinux packages (syslinux installs binaries on Debian/Ubuntu)
+      # Install syslinux packages for isohybrid (Debian 13 has isolinux.bin in syslinux-common)
       apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
-      # Find where the files were installed (varies by distro)
+      # Find where the files were installed (Debian 13 puts them in /usr/lib/syslinux/bios/)
       SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
       if [ -z "$SYSLINUX_DIR" ]; then
         # Check all common locations
-        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios; do
+        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
           if [ -f "$d/isolinux.bin" ]; then
             SYSLINUX_DIR="$d"
             break
@@ -396,12 +396,13 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       fi
       echo "Found syslinux files in: ${SYSLINUX_DIR:-NOT_FOUND}"
       if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-        echo "ERROR: isolinux.bin not found after installing syslinux packages"
-        echo "Searching for isolinux* files:"
-        find /usr -name "isolinux*" -type f 2>/dev/null | head -30
-        echo "Searching for syslinux directories:"
-        find /usr -type d -name "*syslinux*" 2>/dev/null | head -20
-        exit 1
+        echo "ERROR: isolinux.bin not found, downloading from Debian repo..."
+        mkdir -p /tmp/syslinux-download
+        cd /tmp/syslinux-download
+        curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
+        dpkg-deb -x syslinux-common.deb .
+        SYSLINUX_DIR="usr/lib/syslinux/bios"
+        echo "Downloaded syslinux BIOS files to $SYSLINUX_DIR"
       fi
       # Setup syslinux files for live-build binary stage
       mkdir -p /root/isolinux
@@ -410,10 +411,6 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
       cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
       cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
-      # Also copy from /usr/lib/syslinux/modules/bios if that's where c32 files are
-      if [ -d /usr/lib/syslinux/modules/bios ]; then
-        cp /usr/lib/syslinux/modules/bios/*.c32 /root/isolinux/ 2>/dev/null || true
-      fi
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
