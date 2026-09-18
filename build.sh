@@ -109,7 +109,9 @@ lb config \
   --mirror-chroot http://deb.debian.org/debian \
   --security false \
   --apt-indices false \
-  --firmware-binary false
+  --firmware-chroot false \
+  --firmware-binary false \
+  --linux-packages linux-image-amd64
 EOF
 chmod +x config/auto/config
 
