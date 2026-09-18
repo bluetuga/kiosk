@@ -32,110 +32,39 @@ jobs:
           isohybrid --version
           echo "isohybrid OK"
 
-          # Find syslinux files - list ALL locations (including Ubuntu package locations)
-          echo "Searching for syslinux files..."
-          echo "=== dpkg -L syslinux ==="
-          dpkg -L syslinux 2>/dev/null | grep -E '\.(bin|sys|c32)$' || true
-          echo "=== dpkg -L syslinux-common ==="
-          dpkg -L syslinux-common 2>/dev/null | grep -E '\.(bin|sys|c32)$' || true
+          # Ubuntu 24.04 syslinux package layout:
+          # - /usr/lib/SYSLINUX/mbr.bin, gptmbr.bin, altmbr.bin (MBR files, use mbr.bin as hybrid MBR)
+          # - /usr/lib/syslinux/modules/bios/ (COM32 modules including ldlinux.c32)
+          # NO isolinux.bin, isohdpfx.bin, ldlinux.sys in Ubuntu packages
 
-          find /usr -name "isolinux.bin" -type f 2>/dev/null
-          find /usr -name "isohdpfx.bin" -type f 2>/dev/null
-          find /usr -name "ldlinux.sys" -type f 2>/dev/null
-          find /usr -name "syslinux.bin" -type f 2>/dev/null
-          find /usr -name "vesamenu.c32" -type f 2>/dev/null
-
-          SYSLINUX_DIR=""
-          # Search for ANY bootloader file (not just isolinux.bin)
-          for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios /usr/lib/syslinux/modules/efi64 /usr/lib/syslinux/modules/efi32; do
-            if [ -f "$d/isolinux.bin" ] || [ -f "$d/isohdpfx.bin" ] || [ -f "$d/ldlinux.sys" ] || [ -f "$d/syslinux.bin" ]; then
-              SYSLINUX_DIR="$d"
-              echo "Found syslinux files in: $SYSLINUX_DIR"
-              ls -la "$d"/*.bin "$d"/*.sys 2>/dev/null || true
-              break
-            fi
-          done
-
-          # If isolinux.bin not found, download from Debian (try multiple versions)
-          # Debian 13 (trixie) syslinux 6.x lacks BIOS bootloaders; try Debian 12 (bookworm) or 11 (bullseye)
-          if [ -z "$SYSLINUX_DIR" ]; then
-            echo "isolinux.bin not found in Ubuntu packages, downloading from Debian..."
-            mkdir -p /tmp/syslinux-download
-            cd /tmp/syslinux-download
-
-            # Try Debian versions in order: 12 (bookworm), 11 (bullseye), 10 (buster) - older have isolinux.bin
-            for debian_ver in "bookworm" "bullseye" "buster"; do
-              echo "Trying Debian $debian_ver..."
-              # Download syslinux-common (modules)
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb 2>/dev/null || \
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.03-14+deb10u1_all.deb" -o syslinux-common.deb 2>/dev/null || \
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-2_all.deb" -o syslinux-common.deb 2>/dev/null || continue
-              dpkg-deb -x syslinux-common.deb .
-
-              # Download syslinux (bootloaders)
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.04~git20190206.bf6db5b4+dfsg1-3.1_amd64.deb" -o syslinux.deb 2>/dev/null || \
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.03-14+deb10u1_amd64.deb" -o syslinux.deb 2>/dev/null || \
-              curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.04~git20190206.bf6db5b4+dfsg1-2_amd64.deb" -o syslinux.deb 2>/dev/null || continue
-              dpkg-deb -x syslinux.deb .
-
-              echo "Extracted package contents (all files):"
-              find /tmp/syslinux-download -type f 2>/dev/null | sort
-
-              # Find BIOS bootloader - try multiple names/locations
-              ISOLINUX_BIN=$(find /tmp/syslinux-download -type f \( -name "isolinux.bin" -o -name "isohdpfx.bin" -o -name "ldlinux.sys" -o -name "syslinux.bin" \) 2>/dev/null | head -1)
-              if [ -n "$ISOLINUX_BIN" ]; then
-                SYSLINUX_DIR=$(dirname "$ISOLINUX_BIN")
-                echo "Found bootloader at: $ISOLINUX_BIN (from Debian $debian_ver)"
-                echo "Using SYSLINUX_DIR: $SYSLINUX_DIR"
-                ls -la "$SYSLINUX_DIR"/
-                break
-              else
-                echo "No BIOS bootloader in Debian $debian_ver, trying next..."
-                rm -rf /tmp/syslinux-download/*
-              fi
-            done
-
-            if [ -z "$ISOLINUX_BIN" ]; then
-              echo "ERROR: No BIOS bootloader found in any Debian version"
-              exit 1
-            fi
-          fi
-
-          if [ -z "$SYSLINUX_DIR" ]; then
-            echo "ERROR: No suitable bootloader found after download attempt"
-            exit 1
-          fi
-
-          # NOW setup syslinux files AFTER all packages installed
-          # syslinux 6.x: use isohdpfx.bin as isolinux.bin (for live-build binary_syslinux)
-          # AND copy ldlinux.sys (the actual bootloader) - BOTH required for iso-hybrid boot
+          echo "Setting up syslinux files from Ubuntu packages..."
           sudo mkdir -p /usr/lib/syslinux
 
-          # Copy isohdpfx.bin as isolinux.bin (required by live-build's binary_syslinux)
-          if [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/isohdpfx.bin /usr/lib/syslinux/isolinux.bin
-            echo "Copied isohdpfx.bin -> /usr/lib/syslinux/isolinux.bin"
-          elif [ -f "$SYSLINUX_DIR/isolinux.bin" ]; then
-            sudo cp "$SYSLINUX_DIR"/isolinux.bin /usr/lib/syslinux/
-            echo "Copied isolinux.bin"
+          # Use mbr.bin as isolinux.bin (hybrid MBR for iso-hybrid)
+          if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
+            sudo cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+            echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
           else
-            echo "ERROR: Neither isohdpfx.bin nor isolinux.bin found in $SYSLINUX_DIR"
+            echo "ERROR: /usr/lib/SYSLINUX/mbr.bin not found"
             exit 1
           fi
 
-          # Copy ldlinux.sys (syslinux 6.x bootloader) - REQUIRED for boot
-          if [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
-            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /usr/lib/syslinux/
-            echo "Copied ldlinux.sys"
+          # Use ldlinux.c32 as ldlinux.sys (syslinux 6.x uses .c32 for bootloader in some configs)
+          if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ]; then
+            sudo cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
+            echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
           else
-            echo "WARNING: ldlinux.sys not found in $SYSLINUX_DIR, boot may fail"
+            echo "ERROR: ldlinux.c32 not found"
+            exit 1
           fi
 
-          # Copy COM32 modules
-          sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp "$SYSLINUX_DIR"/menu.c32 /usr/lib/syslinux/ 2>/dev/null || true
+          # Copy COM32 modules from Ubuntu's syslinux-common
+          for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+            if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
+              sudo cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
+              echo "Copied $f"
+            fi
+          done
 
           # Fix /root/isolinux: remove whatever postinst created, create symlink
           echo "Checking /root/isolinux before fix..."
