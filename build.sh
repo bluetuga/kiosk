@@ -381,16 +381,19 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
-      # Install syslinux-common first (provides isolinux.bin, vesamenu.c32 in /usr/share/syslinux/)
+      # Install syslinux-common first (provides isolinux.bin, vesamenu.c32)
       apt-get install -y --no-install-recommends syslinux-common
+      # Find where syslinux-common installed the files (varies by distro)
+      SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs dirname)
+      echo "Found syslinux files in: $SYSLINUX_DIR"
       # Setup syslinux files BEFORE installing syslinux package
       # (syslinux postinst tries to access /root/isolinux/)
       mkdir -p /root/isolinux
-      cp /usr/share/syslinux/isolinux.bin /root/isolinux/
-      cp /usr/share/syslinux/vesamenu.c32 /root/isolinux/
-      cp /usr/share/syslinux/libcom32.c32 /root/isolinux/
-      cp /usr/share/syslinux/libutil.c32 /root/isolinux/
-      cp /usr/share/syslinux/menu.c32 /root/isolinux/
+      cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/
+      cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/
+      cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/
+      cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/
+      cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
