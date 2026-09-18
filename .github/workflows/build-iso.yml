@@ -18,7 +18,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install all packages FIRST (syslinux provides isolinux.bin, syslinux-common provides modules)
+          # Install all packages FIRST
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -46,22 +46,22 @@ jobs:
             fi
           done
 
-          # If isolinux.bin not found, download from Debian repo (Ubuntu 24.04 lacks it)
-          # In syslinux 6.x, isolinux.bin may be named differently or in different package
+          # If isolinux.bin not found, download from Debian 13 (trixie) - same as build.sh Docker
+          # Debian 13 syslinux-common has isolinux.bin in /usr/lib/syslinux/bios/
           if [ -z "$SYSLINUX_DIR" ]; then
-            echo "isolinux.bin not found in Ubuntu packages, downloading from Debian trixie..."
+            echo "isolinux.bin not found in Ubuntu packages, downloading from Debian 13 (trixie)..."
             mkdir -p /tmp/syslinux-download
             cd /tmp/syslinux-download
-            # Download syslinux package (contains BIOS bootloaders)
-            curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.04~git20190206.bf6db5b4+dfsg1-3.1_amd64.deb" -o syslinux.deb
-            dpkg-deb -x syslinux.deb .
-            # Download syslinux-common package (contains modules)
+            # Download from Debian 13 (trixie) - same version as build.sh Docker container
             curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
             dpkg-deb -x syslinux-common.deb .
+            # Also get syslinux for the bootloader
+            curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.04~git20190206.bf6db5b4+dfsg1-3.1_amd64.deb" -o syslinux.deb
+            dpkg-deb -x syslinux.deb .
             echo "Extracted package contents (all files):"
             find /tmp/syslinux-download -type f 2>/dev/null | sort
             # Find BIOS bootloader - try multiple names/locations
-            ISOLINUX_BIN=$(find /tmp/syslinux-download -type f \( -name "isolinux.bin" -o -name "isohdpfx.bin" -o -name "ldlinux.sys" -o -name "ldlinux.c32" \) 2>/dev/null | head -1)
+            ISOLINUX_BIN=$(find /tmp/syslinux-download -type f \( -name "isolinux.bin" -o -name "isohdpfx.bin" -o -name "ldlinux.sys" -o -name "syslinux.bin" \) 2>/dev/null | head -1)
             if [ -z "$ISOLINUX_BIN" ]; then
               echo "ERROR: No BIOS bootloader found in extracted packages"
               exit 1
@@ -72,18 +72,22 @@ jobs:
             ls -la "$SYSLINUX_DIR"/
           fi
 
-          if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ] && [ ! -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
+          if [ -z "$SYSLINUX_DIR" ]; then
             echo "ERROR: No suitable bootloader found after download attempt"
             exit 1
           fi
 
           # NOW setup syslinux files AFTER all packages installed
           sudo mkdir -p /usr/lib/syslinux
-          # Copy isolinux.bin or isohdpfx.bin (whichever exists)
+          # Copy isolinux.bin or equivalent
           if [ -f "$SYSLINUX_DIR/isolinux.bin" ]; then
             sudo cp "$SYSLINUX_DIR"/isolinux.bin /usr/lib/syslinux/
           elif [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
             sudo cp "$SYSLINUX_DIR"/isohdpfx.bin /usr/lib/syslinux/isolinux.bin
+          elif [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
+            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /usr/lib/syslinux/isolinux.bin
+          elif [ -f "$SYSLINUX_DIR/syslinux.bin" ]; then
+            sudo cp "$SYSLINUX_DIR"/syslinux.bin /usr/lib/syslinux/isolinux.bin
           fi
           sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp "$SYSLINUX_DIR"/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
@@ -101,6 +105,10 @@ jobs:
             sudo cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/ 2>/dev/null || true
           elif [ -f "$SYSLINUX_DIR/isohdpfx.bin" ]; then
             sudo cp "$SYSLINUX_DIR"/isohdpfx.bin /root/isolinux/isolinux.bin 2>/dev/null || true
+          elif [ -f "$SYSLINUX_DIR/ldlinux.sys" ]; then
+            sudo cp "$SYSLINUX_DIR"/ldlinux.sys /root/isolinux/isolinux.bin 2>/dev/null || true
+          elif [ -f "$SYSLINUX_DIR/syslinux.bin" ]; then
+            sudo cp "$SYSLINUX_DIR"/syslinux.bin /root/isolinux/isolinux.bin 2>/dev/null || true
           fi
           sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
           sudo cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
