@@ -18,7 +18,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install all packages FIRST (syslinux-common provides isolinux.bin)
+          # Install all packages FIRST (syslinux-common provides modules, but not isolinux.bin on Ubuntu 24.04)
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -36,15 +36,6 @@ jobs:
           echo "Searching for syslinux files..."
           find /usr -name "isolinux.bin" -type f 2>/dev/null
           find /usr -name "vesamenu.c32" -type f 2>/dev/null
-          find /usr -name "libcom32.c32" -type f 2>/dev/null
-          find /usr -name "libutil.c32" -type f 2>/dev/null
-          find /usr -name "menu.c32" -type f 2>/dev/null
-
-          # Also check dpkg contents
-          echo "=== dpkg -L syslinux ==="
-          dpkg -L syslinux | grep -E "(isolinux|vesamenu|libcom32|libutil|menu)" || true
-          echo "=== dpkg -L syslinux-common ==="
-          dpkg -L syslinux-common | grep -E "(isolinux|vesamenu|libcom32|libutil|menu)" || true
 
           SYSLINUX_DIR=""
           for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
@@ -55,8 +46,20 @@ jobs:
             fi
           done
 
+          # If isolinux.bin not found, download from Debian repo (Ubuntu 24.04 syslinux-common lacks it)
           if [ -z "$SYSLINUX_DIR" ]; then
-            echo "ERROR: isolinux.bin not found in any known location"
+            echo "isolinux.bin not found in Ubuntu packages, downloading from Debian trixie..."
+            mkdir -p /tmp/syslinux-download
+            cd /tmp/syslinux-download
+            curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
+            dpkg-deb -x syslinux-common.deb .
+            SYSLINUX_DIR="usr/lib/syslinux/bios"
+            echo "Downloaded syslinux BIOS files to $SYSLINUX_DIR"
+            ls -la "$SYSLINUX_DIR"/
+          fi
+
+          if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
+            echo "ERROR: isolinux.bin still not found after download attempt"
             exit 1
           fi
 
