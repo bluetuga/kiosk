@@ -18,12 +18,8 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Pre-setup syslinux files BEFORE installing syslinux packages
-          # (Ubuntu syslinux postinst tries to copy to /root/isolinux/ and fails if not ready)
-          sudo mkdir -p /root/isolinux
-          sudo mkdir -p /usr/lib/syslinux
-          sudo ln -sf /usr/lib/syslinux /root/isolinux
-          # Install live-build and other tools
+          # Install live-build and other tools FIRST
+          # (syslinux postinst may create /root/isolinux as directory)
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -33,14 +29,18 @@ jobs:
           which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
           isohybrid --version
           echo "isohybrid OK"
-          # Copy syslinux BIOS files to where live-build expects them
+          # NOW setup syslinux files AFTER package install
           # Ubuntu 24.04 puts them in /usr/lib/syslinux/bios/
+          sudo mkdir -p /usr/lib/syslinux
           sudo cp /usr/lib/syslinux/bios/isolinux.bin /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/menu.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          # Also copy to /root/isolinux for binary_syslinux
+          # Create /root/isolinux symlink for binary_syslinux (live-build expects this)
+          sudo rm -rf /root/isolinux
+          sudo ln -sf /usr/lib/syslinux /root/isolinux
+          # Also copy to /root/isolinux for good measure
           sudo cp /usr/lib/syslinux/bios/isolinux.bin /root/isolinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/libcom32.c32 /root/isolinux/ 2>/dev/null || true
