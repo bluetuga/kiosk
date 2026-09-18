@@ -18,19 +18,24 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install live-build and other tools FIRST
-          # (syslinux postinst may create /root/isolinux as directory with restricted perms)
+          # Install all packages FIRST
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
             curl python3 binutils xz-utils syslinux syslinux-utils
+
+      - name: Setup syslinux files
+        run: |
           # Verify isohybrid is available (provided by syslinux-utils)
           echo "Checking isohybrid..."
           which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
           isohybrid --version
           echo "isohybrid OK"
-          # NOW setup syslinux files AFTER package install
+          # NOW setup syslinux files AFTER all packages installed
           # Ubuntu 24.04 puts them in /usr/lib/syslinux/bios/
+          echo "Checking syslinux source files..."
+          ls -la /usr/lib/syslinux/bios/ 2>/dev/null || echo "bios dir not found"
+          ls -la /usr/share/syslinux/ 2>/dev/null || echo "share dir not found"
           sudo mkdir -p /usr/lib/syslinux
           sudo cp /usr/lib/syslinux/bios/isolinux.bin /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
