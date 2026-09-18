@@ -32,8 +32,20 @@ jobs:
           isohybrid --version
           echo "isohybrid OK"
 
-          # Find syslinux files (Ubuntu 24.04 puts them in various locations)
+          # Find syslinux files - list ALL locations
           echo "Searching for syslinux files..."
+          find /usr -name "isolinux.bin" -type f 2>/dev/null
+          find /usr -name "vesamenu.c32" -type f 2>/dev/null
+          find /usr -name "libcom32.c32" -type f 2>/dev/null
+          find /usr -name "libutil.c32" -type f 2>/dev/null
+          find /usr -name "menu.c32" -type f 2>/dev/null
+
+          # Also check dpkg contents
+          echo "=== dpkg -L syslinux ==="
+          dpkg -L syslinux | grep -E "(isolinux|vesamenu|libcom32|libutil|menu)" || true
+          echo "=== dpkg -L syslinux-common ==="
+          dpkg -L syslinux-common | grep -E "(isolinux|vesamenu|libcom32|libutil|menu)" || true
+
           SYSLINUX_DIR=""
           for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
             if [ -f "$d/isolinux.bin" ]; then
@@ -45,7 +57,6 @@ jobs:
 
           if [ -z "$SYSLINUX_DIR" ]; then
             echo "ERROR: isolinux.bin not found in any known location"
-            find /usr -name "isolinux.bin" -type f 2>/dev/null | head -5
             exit 1
           fi
 
