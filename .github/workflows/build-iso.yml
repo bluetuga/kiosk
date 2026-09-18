@@ -32,16 +32,26 @@ jobs:
           isohybrid --version
           echo "isohybrid OK"
 
-          # Find syslinux files - list ALL locations
+          # Find syslinux files - list ALL locations (including Ubuntu package locations)
           echo "Searching for syslinux files..."
+          echo "=== dpkg -L syslinux ==="
+          dpkg -L syslinux 2>/dev/null | grep -E '\.(bin|sys|c32)$' || true
+          echo "=== dpkg -L syslinux-common ==="
+          dpkg -L syslinux-common 2>/dev/null | grep -E '\.(bin|sys|c32)$' || true
+
           find /usr -name "isolinux.bin" -type f 2>/dev/null
+          find /usr -name "isohdpfx.bin" -type f 2>/dev/null
+          find /usr -name "ldlinux.sys" -type f 2>/dev/null
+          find /usr -name "syslinux.bin" -type f 2>/dev/null
           find /usr -name "vesamenu.c32" -type f 2>/dev/null
 
           SYSLINUX_DIR=""
-          for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
-            if [ -f "$d/isolinux.bin" ]; then
+          # Search for ANY bootloader file (not just isolinux.bin)
+          for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios /usr/lib/syslinux/modules/efi64 /usr/lib/syslinux/modules/efi32; do
+            if [ -f "$d/isolinux.bin" ] || [ -f "$d/isohdpfx.bin" ] || [ -f "$d/ldlinux.sys" ] || [ -f "$d/syslinux.bin" ]; then
               SYSLINUX_DIR="$d"
               echo "Found syslinux files in: $SYSLINUX_DIR"
+              ls -la "$d"/*.bin "$d"/*.sys 2>/dev/null || true
               break
             fi
           done
