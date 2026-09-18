@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           # Install live-build and other tools FIRST
-          # (syslinux postinst may create /root/isolinux as directory)
+          # (syslinux postinst may create /root/isolinux as directory with restricted perms)
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -37,10 +37,12 @@ jobs:
           sudo cp /usr/lib/syslinux/bios/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/menu.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          # Create /root/isolinux symlink for binary_syslinux (live-build expects this)
+          # Fix /root/isolinux: remove whatever postinst created, create symlink
+          echo "Checking /root/isolinux before fix..."
+          ls -ld /root/isolinux 2>/dev/null || echo "Does not exist"
           sudo rm -rf /root/isolinux
           sudo ln -sf /usr/lib/syslinux /root/isolinux
-          # Also copy to /root/isolinux for good measure
+          # Also copy to /root/isolinux for binary_syslinux
           sudo cp /usr/lib/syslinux/bios/isolinux.bin /root/isolinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
           sudo cp /usr/lib/syslinux/bios/libcom32.c32 /root/isolinux/ 2>/dev/null || true
