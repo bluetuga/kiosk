@@ -53,7 +53,7 @@ jobs:
             cd /tmp/syslinux-download
             curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
             dpkg-deb -x syslinux-common.deb .
-            SYSLINUX_DIR="usr/lib/syslinux/bios"
+            SYSLINUX_DIR="/tmp/syslinux-download/usr/lib/syslinux/bios"
             echo "Downloaded syslinux BIOS files to $SYSLINUX_DIR"
             ls -la "$SYSLINUX_DIR"/
           fi
