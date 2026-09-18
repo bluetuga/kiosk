@@ -1,0 +1,10 @@
+.build/
+cache/
+chroot/
+config/
+binary/
+output/
+*.deb
+*.log
+test_*
+patch_*
