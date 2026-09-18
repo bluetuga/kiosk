@@ -53,8 +53,15 @@ jobs:
             cd /tmp/syslinux-download
             curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
             dpkg-deb -x syslinux-common.deb .
-            SYSLINUX_DIR="/tmp/syslinux-download/usr/lib/syslinux/bios"
-            echo "Downloaded syslinux BIOS files to $SYSLINUX_DIR"
+            echo "Extracted package contents:"
+            find /tmp/syslinux-download -type f -name "*.bin" -o -name "*.c32" 2>/dev/null | head -20
+            # Find where isolinux.bin actually ended up
+            SYSLINUX_DIR=$(find /tmp/syslinux-download -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
+            if [ -z "$SYSLINUX_DIR" ]; then
+              echo "ERROR: isolinux.bin not found in extracted package"
+              exit 1
+            fi
+            echo "Found syslinux BIOS files in: $SYSLINUX_DIR"
             ls -la "$SYSLINUX_DIR"/
           fi
 
