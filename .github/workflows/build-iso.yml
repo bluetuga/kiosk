@@ -20,11 +20,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
-            syslinux mtools dosfstools \
+            syslinux syslinux-utils mtools dosfstools \
             curl python3 binutils xz-utils
-          # Verify isohybrid is available (provided by syslinux)
+          # Verify isohybrid is available (provided by syslinux-utils)
           echo "Checking isohybrid..."
-          which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
+          which isohybrid || (echo "isohybrid not found in PATH" && find /usr -name isohybrid 2>/dev/null && exit 1)
           isohybrid --version
           echo "isohybrid OK"
 

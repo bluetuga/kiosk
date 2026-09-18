@@ -292,9 +292,9 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       apt-get update
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
-        syslinux mtools dosfstools \
+        syslinux syslinux-utils mtools dosfstools \
         curl python3 binutils xz-utils qemu-user-static
-      # Verify isohybrid is available (provided by syslinux)
+      # Verify isohybrid is available (provided by syslinux-utils)
       which isohybrid || (echo "isohybrid not found!" && exit 1)
       isohybrid --version
 
