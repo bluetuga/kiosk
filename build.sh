@@ -318,6 +318,29 @@ ls -la /usr/lib/syslinux/
 EOF
 chmod +x config/hooks/binary/99-setup-syslinux.hook.binary
 
+# Pre-build syslinux setup (runs BEFORE lb build, since binary hook runs too late)
+# live-build's binary_syslinux tries to copy from /root/isolinux/ which doesn't exist
+setup_syslinux_files() {
+    echo "Setting up syslinux files for live-build..."
+    mkdir -p /usr/lib/syslinux
+    # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
+    ln -sf /usr/lib/syslinux /root/isolinux
+    # Also ensure files are in /usr/lib/syslinux
+    for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+        if [ ! -f "/usr/lib/syslinux/$f" ]; then
+            for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
+                if [ -f "$src" ]; then
+                    cp "$src" /usr/lib/syslinux/
+                    break
+                fi
+            done
+        fi
+    done
+    echo "Syslinux files setup complete"
+    ls -la /usr/lib/syslinux/
+    ls -la /root/isolinux/
+}
+
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
   # macOS (Docker) — usa --platform linux/amd64 para cross-compile via QEMU do Docker Desktop
@@ -343,6 +366,28 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       which isohybrid || (echo "isohybrid not found!" && exit 1)
       isohybrid --version
 
+      # Setup syslinux files function (for Docker container)
+      setup_syslinux_files() {
+          echo "Setting up syslinux files for live-build..."
+          mkdir -p /usr/lib/syslinux
+          # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
+          ln -sf /usr/lib/syslinux /root/isolinux
+          # Also ensure files are in /usr/lib/syslinux
+          for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+              if [ ! -f "/usr/lib/syslinux/$f" ]; then
+                  for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f; do
+                      if [ -f "$src" ]; then
+                          cp "$src" /usr/lib/syslinux/
+                          break
+                      fi
+                  done
+              fi
+          done
+          echo "Syslinux files setup complete"
+          ls -la /usr/lib/syslinux/
+          ls -la /root/isolinux/
+      }
+
       # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
       mkdir -p /etc/dpkg/dpkg.cfg.d
       echo "force-overwrite" > /etc/dpkg/dpkg.cfg.d/force-overwrite
@@ -353,6 +398,8 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       ./patch-debootstrap-tar.sh
 
       ./config/auto/config
+      # Setup syslinux files BEFORE lb build (binary_syslinux needs /root/isolinux/)
+      setup_syslinux_files
       echo "Running lb build..."
       lb build --verbose
       echo "lb build exit code: $?"
@@ -376,6 +423,8 @@ else
   isohybrid --version
   ./config/auto/config
   ./patch-debootstrap-tar.sh
+  # Setup syslinux files BEFORE lb build (binary_syslinux needs /root/isolinux/)
+  setup_syslinux_files
   lb build 2>&1 | tee build.log
 fi
 
