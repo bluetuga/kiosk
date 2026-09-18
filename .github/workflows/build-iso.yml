@@ -18,11 +18,11 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install all packages FIRST
+          # Install all packages FIRST (syslinux-common provides isolinux.bin)
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
-            curl python3 binutils xz-utils syslinux syslinux-utils
+            curl python3 binutils xz-utils syslinux syslinux-common syslinux-utils
 
       - name: Setup syslinux files
         run: |
