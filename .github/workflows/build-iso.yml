@@ -31,28 +31,45 @@ jobs:
           which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
           isohybrid --version
           echo "isohybrid OK"
+
+          # Find syslinux files (Ubuntu 24.04 puts them in various locations)
+          echo "Searching for syslinux files..."
+          SYSLINUX_DIR=""
+          for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX /usr/lib/syslinux/modules/bios /usr/lib/syslinux/bios; do
+            if [ -f "$d/isolinux.bin" ]; then
+              SYSLINUX_DIR="$d"
+              echo "Found syslinux files in: $SYSLINUX_DIR"
+              break
+            fi
+          done
+
+          if [ -z "$SYSLINUX_DIR" ]; then
+            echo "ERROR: isolinux.bin not found in any known location"
+            find /usr -name "isolinux.bin" -type f 2>/dev/null | head -5
+            exit 1
+          fi
+
           # NOW setup syslinux files AFTER all packages installed
-          # Ubuntu 24.04 puts them in /usr/lib/syslinux/bios/
-          echo "Checking syslinux source files..."
-          ls -la /usr/lib/syslinux/bios/ 2>/dev/null || echo "bios dir not found"
-          ls -la /usr/share/syslinux/ 2>/dev/null || echo "share dir not found"
           sudo mkdir -p /usr/lib/syslinux
-          sudo cp /usr/lib/syslinux/bios/isolinux.bin /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/menu.c32 /usr/lib/syslinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/isolinux.bin /usr/lib/syslinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /usr/lib/syslinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/libcom32.c32 /usr/lib/syslinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/libutil.c32 /usr/lib/syslinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/menu.c32 /usr/lib/syslinux/ 2>/dev/null || true
+
           # Fix /root/isolinux: remove whatever postinst created, create symlink
           echo "Checking /root/isolinux before fix..."
           ls -ld /root/isolinux 2>/dev/null || echo "Does not exist"
           sudo rm -rf /root/isolinux
           sudo ln -sf /usr/lib/syslinux /root/isolinux
+
           # Also copy to /root/isolinux for binary_syslinux
-          sudo cp /usr/lib/syslinux/bios/isolinux.bin /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/libutil.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/bios/menu.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/isolinux.bin /root/isolinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/libcom32.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/libutil.c32 /root/isolinux/ 2>/dev/null || true
+          sudo cp "$SYSLINUX_DIR"/menu.c32 /root/isolinux/ 2>/dev/null || true
+
           echo "Syslinux files setup complete"
           ls -la /usr/lib/syslinux/
           ls -la /root/isolinux/
