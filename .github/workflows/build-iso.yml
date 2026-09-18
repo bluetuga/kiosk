@@ -47,7 +47,7 @@ jobs:
           done
 
           # If isolinux.bin not found, download from Debian repo (Ubuntu 24.04 lacks it)
-          # isolinux.bin is in the 'syslinux' package, modules in 'syslinux-common'
+          # isolinux.bin is in the 'syslinux' package (amd64), modules in 'syslinux-common'
           if [ -z "$SYSLINUX_DIR" ]; then
             echo "isolinux.bin not found in Ubuntu packages, downloading from Debian trixie..."
             mkdir -p /tmp/syslinux-download
@@ -58,15 +58,19 @@ jobs:
             # Download syslinux-common package (contains modules)
             curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
             dpkg-deb -x syslinux-common.deb .
-            echo "Extracted package contents:"
-            find /tmp/syslinux-download -type f -name "*.bin" -o -name "*.c32" 2>/dev/null | head -30
-            # Find where isolinux.bin actually ended up
-            SYSLINUX_DIR=$(find /tmp/syslinux-download -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
-            if [ -z "$SYSLINUX_DIR" ]; then
+            echo "Extracted package contents (all .bin and .c32 files):"
+            find /tmp/syslinux-download -type f \( -name "*.bin" -o -name "*.c32" \) 2>/dev/null | head -50
+            # Find where isolinux.bin actually ended up (search recursively)
+            ISOLINUX_BIN=$(find /tmp/syslinux-download -name "isolinux.bin" -type f 2>/dev/null | head -1)
+            if [ -z "$ISOLINUX_BIN" ]; then
               echo "ERROR: isolinux.bin not found in extracted packages"
+              echo "Listing all files in extracted packages:"
+              find /tmp/syslinux-download -type f 2>/dev/null | head -100
               exit 1
             fi
-            echo "Found syslinux BIOS files in: $SYSLINUX_DIR"
+            SYSLINUX_DIR=$(dirname "$ISOLINUX_BIN")
+            echo "Found isolinux.bin at: $ISOLINUX_BIN"
+            echo "Using SYSLINUX_DIR: $SYSLINUX_DIR"
             ls -la "$SYSLINUX_DIR"/
           fi
 
