@@ -327,6 +327,9 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
 else
   # Linux (native)
   echo "Starting live-build (native)..."
+  # Verify isohybrid is available (needed for iso-hybrid binary stage)
+  which isohybrid || (echo "isohybrid not found! Install syslinux-utils" && exit 1)
+  isohybrid --version
   ./config/auto/config
   ./patch-debootstrap-tar.sh
   lb build 2>&1 | tee build.log
