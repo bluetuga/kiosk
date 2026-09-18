@@ -21,6 +21,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             grub-pc-bin grub-efi-amd64-bin mtools dosfstools \
+            syslinux-utils \
             curl python3 binutils xz-utils
 
       - name: Build ISO
