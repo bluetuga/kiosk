@@ -381,9 +381,17 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
+      # Install syslinux-common first (provides isolinux.bin, vesamenu.c32 in /usr/share/syslinux/)
+      apt-get install -y --no-install-recommends syslinux-common
       # Setup syslinux files BEFORE installing syslinux package
       # (syslinux postinst tries to access /root/isolinux/)
-      setup_syslinux_files
+      mkdir -p /root/isolinux
+      cp /usr/share/syslinux/isolinux.bin /root/isolinux/
+      cp /usr/share/syslinux/vesamenu.c32 /root/isolinux/
+      cp /usr/share/syslinux/libcom32.c32 /root/isolinux/
+      cp /usr/share/syslinux/libutil.c32 /root/isolinux/
+      cp /usr/share/syslinux/menu.c32 /root/isolinux/
+      # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
         syslinux syslinux-utils mtools dosfstools \

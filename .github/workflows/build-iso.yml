@@ -18,10 +18,17 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
+          # Install syslinux-common first (provides isolinux.bin, vesamenu.c32 in /usr/share/syslinux/)
+          sudo apt-get install -y --no-install-recommends syslinux-common
           # Setup syslinux files BEFORE installing syslinux package
           # (syslinux postinst tries to access /root/isolinux/)
-          sudo mkdir -p /usr/lib/syslinux
-          sudo ln -sf /usr/lib/syslinux /root/isolinux
+          sudo mkdir -p /root/isolinux
+          sudo cp /usr/share/syslinux/isolinux.bin /root/isolinux/
+          sudo cp /usr/share/syslinux/vesamenu.c32 /root/isolinux/
+          sudo cp /usr/share/syslinux/libcom32.c32 /root/isolinux/
+          sudo cp /usr/share/syslinux/libutil.c32 /root/isolinux/
+          sudo cp /usr/share/syslinux/menu.c32 /root/isolinux/
+          # Now install remaining packages
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             syslinux syslinux-utils mtools dosfstools \
