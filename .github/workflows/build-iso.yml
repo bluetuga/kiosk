@@ -18,7 +18,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install all packages FIRST (syslinux-common provides modules, but not isolinux.bin on Ubuntu 24.04)
+          # Install all packages FIRST (syslinux provides isolinux.bin, syslinux-common provides modules)
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
@@ -46,19 +46,24 @@ jobs:
             fi
           done
 
-          # If isolinux.bin not found, download from Debian repo (Ubuntu 24.04 syslinux-common lacks it)
+          # If isolinux.bin not found, download from Debian repo (Ubuntu 24.04 lacks it)
+          # isolinux.bin is in the 'syslinux' package, modules in 'syslinux-common'
           if [ -z "$SYSLINUX_DIR" ]; then
             echo "isolinux.bin not found in Ubuntu packages, downloading from Debian trixie..."
             mkdir -p /tmp/syslinux-download
             cd /tmp/syslinux-download
+            # Download syslinux package (contains isolinux.bin)
+            curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux_6.04~git20190206.bf6db5b4+dfsg1-3.1_amd64.deb" -o syslinux.deb
+            dpkg-deb -x syslinux.deb .
+            # Download syslinux-common package (contains modules)
             curl -fsSL "http://deb.debian.org/debian/pool/main/s/syslinux/syslinux-common_6.04~git20190206.bf6db5b4+dfsg1-3_all.deb" -o syslinux-common.deb
             dpkg-deb -x syslinux-common.deb .
             echo "Extracted package contents:"
-            find /tmp/syslinux-download -type f -name "*.bin" -o -name "*.c32" 2>/dev/null | head -20
+            find /tmp/syslinux-download -type f -name "*.bin" -o -name "*.c32" 2>/dev/null | head -30
             # Find where isolinux.bin actually ended up
             SYSLINUX_DIR=$(find /tmp/syslinux-download -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
             if [ -z "$SYSLINUX_DIR" ]; then
-              echo "ERROR: isolinux.bin not found in extracted package"
+              echo "ERROR: isolinux.bin not found in extracted packages"
               exit 1
             fi
             echo "Found syslinux BIOS files in: $SYSLINUX_DIR"
