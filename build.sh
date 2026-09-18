@@ -384,8 +384,22 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       # Install syslinux-common first (provides isolinux.bin, vesamenu.c32)
       apt-get install -y --no-install-recommends syslinux-common
       # Find where syslinux-common installed the files (varies by distro)
-      SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs dirname)
+      SYSLINUX_DIR=$(find /usr -name "isolinux.bin" -type f 2>/dev/null | head -1 | xargs -r dirname)
+      if [ -z "$SYSLINUX_DIR" ]; then
+        # Fallback: check common locations
+        for d in /usr/lib/syslinux /usr/share/syslinux /usr/lib/ISOLINUX; do
+          if [ -f "$d/isolinux.bin" ]; then
+            SYSLINUX_DIR="$d"
+            break
+          fi
+        done
+      fi
       echo "Found syslinux files in: $SYSLINUX_DIR"
+      if [ -z "$SYSLINUX_DIR" ] || [ ! -f "$SYSLINUX_DIR/isolinux.bin" ]; then
+        echo "ERROR: isolinux.bin not found after installing syslinux-common"
+        find /usr -name "isolinux*" 2>/dev/null | head -20
+        exit 1
+      fi
       # Setup syslinux files BEFORE installing syslinux package
       # (syslinux postinst tries to access /root/isolinux/)
       mkdir -p /root/isolinux
