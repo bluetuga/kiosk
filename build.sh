@@ -96,7 +96,7 @@ lb config \
   --distribution trixie \
   --architectures amd64 \
   --binary-images iso-hybrid \
-  --bootloader grub-efi,grub-pc \
+  --bootloader syslinux \
   --debian-installer false \
   --archive-areas "main contrib non-free non-free-firmware" \
   --apt-recommends false \
@@ -273,24 +273,6 @@ test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 mkdir -p cache/binary_debian-installer
 echo "dummy" | gzip > cache/binary_debian-installer/Contents-amd64.gz
 
-# Binary hook to ensure isohybrid is in PATH during binary stage
-mkdir -p config/hooks/binary
-cat > config/hooks/binary/99-ensure-isohybrid.hook.binary <<'EOF'
-#!/bin/bash
-set -e
-# Ensure isohybrid is available for iso-hybrid creation
-# Live-build binary stage runs with minimal PATH
-export PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-# Verify isohybrid exists
-if ! command -v isohybrid >/dev/null 2>&1; then
-    echo "ERROR: isohybrid not found in PATH"
-    ls -la /usr/bin/isohybrid /usr/sbin/isohybrid 2>/dev/null || true
-    exit 1
-fi
-echo "isohybrid OK: $(which isohybrid)"
-EOF
-chmod +x config/hooks/binary/99-ensure-isohybrid.hook.binary
-
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
   # macOS (Docker) — usa --platform linux/amd64 para cross-compile via QEMU do Docker Desktop
@@ -310,10 +292,9 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       apt-get update
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
-        grub-pc-bin grub-efi-amd64-bin mtools dosfstools \
-        syslinux-utils syslinux \
+        syslinux mtools dosfstools \
         curl python3 binutils xz-utils qemu-user-static
-      # Verify isohybrid is available
+      # Verify isohybrid is available (provided by syslinux)
       which isohybrid || (echo "isohybrid not found!" && exit 1)
       isohybrid --version
 
