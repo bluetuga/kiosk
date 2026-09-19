@@ -551,24 +551,29 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       set -x
       apt-get update
 
-      # Install ONLY syslinux-common via apt (provides COM32 modules)
-      # syslinux and syslinux-utils have problematic postinst - extract manually
-      apt-get install -y --no-install-recommends syslinux-common
-
-      # Extract needed files from syslinux .deb and syslinux-utils .deb manually
+      # DO NOT install any syslinux packages via apt (syslinux postinst breaks)
+      # Extract ALL needed files from .deb packages manually
       mkdir -p /tmp/syslinux-extract
       cd /tmp/syslinux-extract
 
-      # Extract mbr.bin from syslinux .deb
-      apt-get download syslinux
+      # Download all three syslinux-related packages
+      apt-get download syslinux syslinux-common syslinux-utils
+
+      # Extract syslinux (for mbr.bin in /usr/lib/SYSLINUX/)
       dpkg-deb -x syslinux_*.deb .
       if [ -f "usr/lib/SYSLINUX/mbr.bin" ]; then
           cp usr/lib/SYSLINUX/mbr.bin /usr/lib/SYSLINUX/mbr.bin
           echo "Extracted mbr.bin from syslinux deb"
       fi
 
-      # Extract isohybrid from syslinux-utils .deb
-      apt-get download syslinux-utils
+      # Extract syslinux-common (for COM32 modules in /usr/lib/syslinux/modules/bios/)
+      dpkg-deb -x syslinux-common_*.deb .
+      if [ -d "usr/lib/syslinux/modules/bios" ]; then
+          cp -r usr/lib/syslinux/modules/bios /usr/lib/syslinux/modules/
+          echo "Extracted COM32 modules from syslinux-common deb"
+      fi
+
+      # Extract syslinux-utils (for isohybrid)
       dpkg-deb -x syslinux-utils_*.deb .
       if [ -f "usr/bin/isohybrid" ]; then
           cp usr/bin/isohybrid /usr/bin/isohybrid
@@ -582,20 +587,21 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       mkdir -p /usr/lib/syslinux
       ln -sf /usr/lib/syslinux /root/isolinux
 
-      # Copy modules from syslinux-common (already installed)
-      # syslinux 6.x (Debian 13): modules are in /usr/lib/syslinux/modules/bios/
-      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
-          if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
-              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-              echo "Copied $f to /usr/lib/syslinux/"
-          fi
-      done
       # Use mbr.bin as isolinux.bin (hybrid MBR)
       if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
           cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
           cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
           echo "Copied mbr.bin as isolinux.bin"
       fi
+
+      # Copy COM32 modules from extracted syslinux-common
+      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+          if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
+              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
+              echo "Copied $f to /usr/lib/syslinux/"
+          fi
+      done
+
       # Use ldlinux.c32 as ldlinux.sys
       if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ]; then
           cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
