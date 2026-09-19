@@ -18,71 +18,10 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install all packages FIRST
           sudo apt-get install -y --no-install-recommends \
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
-            curl python3 binutils xz-utils syslinux syslinux-common syslinux-utils
-
-      - name: Setup syslinux files
-        run: |
-          # Verify isohybrid is available (provided by syslinux-utils)
-          echo "Checking isohybrid..."
-          which isohybrid || (echo "isohybrid not found in PATH" && exit 1)
-          isohybrid --version
-          echo "isohybrid OK"
-
-          # Ubuntu 24.04 syslinux package layout:
-          # - /usr/lib/SYSLINUX/mbr.bin, gptmbr.bin, altmbr.bin (MBR files, use mbr.bin as hybrid MBR)
-          # - /usr/lib/syslinux/modules/bios/ (COM32 modules including ldlinux.c32)
-          # NO isolinux.bin, isohdpfx.bin, ldlinux.sys in Ubuntu packages
-
-          echo "Setting up syslinux files from Ubuntu packages..."
-          sudo mkdir -p /usr/lib/syslinux
-
-          # Use mbr.bin as isolinux.bin (hybrid MBR for iso-hybrid)
-          if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
-            sudo cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
-            echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
-          else
-            echo "ERROR: /usr/lib/SYSLINUX/mbr.bin not found"
-            exit 1
-          fi
-
-          # Use ldlinux.c32 as ldlinux.sys (syslinux 6.x uses .c32 for bootloader in some configs)
-          if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ]; then
-            sudo cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
-            echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
-          else
-            echo "ERROR: ldlinux.c32 not found"
-            exit 1
-          fi
-
-          # Copy COM32 modules from Ubuntu's syslinux-common
-          for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-            if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
-              sudo cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-              echo "Copied $f"
-            fi
-          done
-
-          # Fix /root/isolinux: remove whatever postinst created, create symlink
-          echo "Checking /root/isolinux before fix..."
-          ls -ld /root/isolinux 2>/dev/null || echo "Does not exist"
-          sudo rm -rf /root/isolinux
-          sudo ln -sf /usr/lib/syslinux /root/isolinux
-
-          # Also copy to /root/isolinux for binary_syslinux
-          sudo cp /usr/lib/syslinux/isolinux.bin /root/isolinux/isolinux.bin 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/ldlinux.sys /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/libutil.c32 /root/isolinux/ 2>/dev/null || true
-          sudo cp /usr/lib/syslinux/menu.c32 /root/isolinux/ 2>/dev/null || true
-
-          echo "Syslinux files setup complete"
-          ls -la /usr/lib/syslinux/
-          sudo ls -la /root/isolinux/
+            curl python3 binutils xz-utils
 
       - name: Build ISO
         run: |
@@ -90,6 +29,7 @@ jobs:
 
       - name: Verify ISO
         run: |
+          test -f output/cercifaf-kiosk-amd64.iso
           ls -lh output/cercifaf-kiosk-amd64.iso
           file output/cercifaf-kiosk-amd64.iso
           sha256sum output/cercifaf-kiosk-amd64.iso > output/cercifaf-kiosk-amd64.iso.sha256

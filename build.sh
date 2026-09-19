@@ -596,73 +596,16 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       set -x
       apt-get update
 
-      # DO NOT install any syslinux packages via apt (syslinux postinst breaks)
-      # Extract ALL needed files from .deb packages manually
-      mkdir -p /tmp/syslinux-extract
-      cd /tmp/syslinux-extract
-
-      # Download all three syslinux-related packages
-      apt-get download syslinux syslinux-common syslinux-utils
-
-      # Extract syslinux (for mbr.bin in /usr/lib/SYSLINUX/)
-      dpkg-deb -x syslinux_*.deb .
-      if [ -f "usr/lib/SYSLINUX/mbr.bin" ]; then
-          cp usr/lib/SYSLINUX/mbr.bin /usr/lib/SYSLINUX/mbr.bin
-          echo "Extracted mbr.bin from syslinux deb"
-      fi
-
-      # Extract syslinux-common (for COM32 modules in /usr/lib/syslinux/modules/bios/)
-      dpkg-deb -x syslinux-common_*.deb .
-      if [ -d "usr/lib/syslinux/modules/bios" ]; then
-          cp -r usr/lib/syslinux/modules/bios /usr/lib/syslinux/modules/
-          echo "Extracted COM32 modules from syslinux-common deb"
-      fi
-
-      # Extract syslinux-utils (for isohybrid)
-      dpkg-deb -x syslinux-utils_*.deb .
-      if [ -f "usr/bin/isohybrid" ]; then
-          cp usr/bin/isohybrid /usr/bin/isohybrid
-          chmod +x /usr/bin/isohybrid
-          echo "Extracted isohybrid from syslinux-utils deb"
-      fi
-
-      cd /workspace
-
-      # Set up syslinux files for live-build binary stage
-      mkdir -p /usr/lib/syslinux
-      ln -sf /usr/lib/syslinux /root/isolinux
-
-      # Use mbr.bin as isolinux.bin (hybrid MBR)
-      if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
-          cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
-          cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
-          echo "Copied mbr.bin as isolinux.bin"
-      fi
-
-      # Copy COM32 modules from extracted syslinux-common
-      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
-          if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
-              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-              echo "Copied $f to /usr/lib/syslinux/"
-          fi
-      done
-
-      # Use ldlinux.c32 as ldlinux.sys
-      if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ]; then
-          cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
-          cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /root/isolinux/ldlinux.sys
-          echo "Copied ldlinux.c32 as ldlinux.sys"
-      fi
-
-      # Verify isohybrid is available
-      which isohybrid || (echo "isohybrid not found!" && exit 1)
-      isohybrid --version
-
-      # Now install remaining packages
+      # Install all build dependencies including syslinux (early hook handles postinst)
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
         mtools dosfstools \
-        curl python3 binutils xz-utils qemu-user-static
+        curl python3 binutils xz-utils qemu-user-static \
+        syslinux syslinux-common syslinux-utils
+
+      # Verify isohybrid is available (provided by syslinux-utils)
+      which isohybrid || (echo "isohybrid not found!" && exit 1)
+      isohybrid --version
 
       # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
       mkdir -p /etc/dpkg/dpkg.cfg.d
