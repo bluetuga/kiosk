@@ -458,6 +458,51 @@ echo "Finished 99-clean-dpkg-new hook"
 EOF
 chmod +x config/hooks/normal/99-clean-dpkg-new.hook.chroot
 
+# Hook to set up syslinux files EARLY during package installation (before syslinux postinst)
+# Priority 00- runs before most packages including syslinux
+mkdir -p config/hooks/normal
+cat > config/hooks/normal/00-setup-syslinux-for-postinst.hook.chroot <<'EOF'
+#!/bin/bash
+set -e
+echo "Setting up syslinux files for postinst (early hook)..."
+mkdir -p /usr/lib/syslinux
+mkdir -p /root/isolinux
+
+# Debian 13 (trixie) syslinux 6.x: extract files from packages that may already be installed
+# Check if syslinux-common was already installed (provides modules)
+if [ -d "/usr/lib/syslinux/modules/bios" ]; then
+    for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+        if [ -f "/usr/lib/syslinux/modules/bios/$f" ] && [ ! -f "/usr/lib/syslinux/$f" ]; then
+            cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
+        fi
+    done
+fi
+
+# Check if syslinux was already installed (provides mbr.bin)
+if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
+    cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+    cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
+fi
+
+# Also copy ldlinux.c32 as ldlinux.sys if available
+if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
+    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
+    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /root/isolinux/ldlinux.sys
+fi
+
+# Copy modules to /root/isolinux for syslinux postinst
+for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+    if [ -f "/usr/lib/syslinux/$f" ] && [ ! -f "/root/isolinux/$f" ]; then
+        cp "/usr/lib/syslinux/$f" /root/isolinux/
+    fi
+done
+
+echo "Early syslinux setup complete"
+ls -la /usr/lib/syslinux/
+ls -la /root/isolinux/
+EOF
+chmod +x config/hooks/normal/00-setup-syslinux-for-postinst.hook.chroot
+
 # Hook to configure locale and timezone
 mkdir -p config/hooks/chroot
 cat > config/hooks/chroot/99-locale-timezone.hook.chroot <<'EOF'
