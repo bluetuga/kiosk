@@ -129,6 +129,7 @@ chmod +x config/hooks/chroot/99-fix-security-repo.hook.chroot
 
 # Hook to set up syslinux files during chroot phase (runs in both native and Docker)
 # This ensures isolinux.bin and modules are available for binary_syslinux later
+# Debian 13 (trixie) syslinux 6.x: mbr.bin in /usr/lib/SYSLINUX/, ldlinux.c32 in modules/bios/
 mkdir -p config/hooks/chroot
 cat > config/hooks/chroot/99-setup-syslinux.hook.chroot <<'EOF'
 #!/bin/bash
@@ -137,8 +138,21 @@ echo "Setting up syslinux files in chroot..."
 mkdir -p /usr/lib/syslinux
 # Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
 ln -sf /usr/lib/syslinux /root/isolinux
-# Copy syslinux files from installed packages to where live-build expects them
-for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+
+# syslinux 6.x (Debian 13): use mbr.bin as isolinux.bin (hybrid MBR)
+if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
+    cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+    echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
+fi
+
+# syslinux 6.x: use ldlinux.c32 as ldlinux.sys
+if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
+    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
+    echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
+fi
+
+# Copy COM32 modules from installed packages to where live-build expects them
+for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
   if [ ! -f "/usr/lib/syslinux/$f" ]; then
     for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
       if [ -f "$src" ]; then
@@ -156,6 +170,7 @@ chmod +x config/hooks/chroot/99-setup-syslinux.hook.chroot
 
 # Binary hook to ensure syslinux files are in place for binary_syslinux stage
 # This runs during the binary phase, before iso creation
+# Debian 13 (trixie) syslinux 6.x: mbr.bin in /usr/lib/SYSLINUX/, ldlinux.c32 in modules/bios/
 mkdir -p config/hooks/binary
 cat > config/hooks/binary/99-ensure-syslinux.hook.binary <<'EOF'
 #!/bin/bash
@@ -163,6 +178,19 @@ set -e
 echo "Ensuring syslinux files for binary stage..."
 mkdir -p /usr/lib/syslinux
 ln -sf /usr/lib/syslinux /root/isolinux
+
+# syslinux 6.x (Debian 13): use mbr.bin as isolinux.bin (hybrid MBR)
+if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
+    cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+    echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
+fi
+
+# syslinux 6.x: use ldlinux.c32 as ldlinux.sys
+if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
+    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
+    echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
+fi
+
 for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
   if [ ! -f "/usr/lib/syslinux/$f" ]; then
     for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
