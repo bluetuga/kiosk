@@ -550,8 +550,41 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
     bash -c '
       set -x
       apt-get update
-      # Install syslinux packages for isohybrid (Debian 13 has isolinux.bin in syslinux-common)
+
+      # PRE-INSTALL: Set up syslinux files BEFORE installing syslinux package
+      # (syslinux postinst tries to access /root/isolinux)
+      mkdir -p /usr/lib/syslinux
+      ln -sf /usr/lib/syslinux /root/isolinux
+
+      # Install syslinux packages for isohybrid
       apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
+
+      # POST-INSTALL: Configure syslinux 6.x files (Debian 13/trixie)
+      # Use mbr.bin as isolinux.bin (hybrid MBR)
+      if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
+          cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+          echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
+      fi
+      # Use ldlinux.c32 as ldlinux.sys
+      if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
+          cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
+          echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
+      fi
+      # Copy COM32 modules
+      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
+          if [ -f "/usr/lib/syslinux/modules/bios/$f" ] && [ ! -f "/usr/lib/syslinux/$f" ]; then
+              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
+              echo "Copied $f"
+          fi
+      done
+      # Also copy to /root/isolinux
+      cp /usr/lib/syslinux/isolinux.bin /root/isolinux/ 2>/dev/null || true
+      cp /usr/lib/syslinux/ldlinux.sys /root/isolinux/ 2>/dev/null || true
+      cp /usr/lib/syslinux/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
+      cp /usr/lib/syslinux/libcom32.c32 /root/isolinux/ 2>/dev/null || true
+      cp /usr/lib/syslinux/libutil.c32 /root/isolinux/ 2>/dev/null || true
+      cp /usr/lib/syslinux/menu.c32 /root/isolinux/ 2>/dev/null || true
+
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
