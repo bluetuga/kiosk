@@ -134,7 +134,7 @@ lb config \
   --distribution trixie \
   --architectures amd64 \
   --binary-images iso-hybrid \
-  --bootloader syslinux \
+  --bootloaders syslinux,grub-efi \
   --debian-installer false \
   --archive-areas "main contrib non-free non-free-firmware" \
   --apt-recommends false \
@@ -168,14 +168,14 @@ chmod +x config/hooks/chroot/99-fix-security-repo.hook.chroot
 # Hook to set up syslinux files during chroot phase (runs in both native and Docker)
 # This ensures isolinux.bin and modules are available for binary_syslinux later
 # Debian 13 (trixie) syslinux 6.x: mbr.bin in /usr/lib/SYSLINUX/, ldlinux.c32 in modules/bios/
+# NOTE: Do NOT create /root/isolinux symlink here - it triggers syslinux postinst failure
+# The postinst runs during package installation and fails if /root/isolinux/isolinux.bin doesn't exist
 mkdir -p config/hooks/chroot
 cat > config/hooks/chroot/99-setup-syslinux.hook.chroot <<'EOF'
 #!/bin/bash
 set -e
 echo "Setting up syslinux files in chroot..."
 mkdir -p /usr/lib/syslinux
-# Create /root/isolinux symlink to /usr/lib/syslinux where live-build looks
-ln -sf /usr/lib/syslinux /root/isolinux
 
 # syslinux 6.x (Debian 13): use mbr.bin as isolinux.bin (hybrid MBR)
 if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
@@ -202,20 +202,19 @@ for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
 done
 echo "Syslinux files setup complete"
 ls -la /usr/lib/syslinux/
-ls -la /root/isolinux/
 EOF
 chmod +x config/hooks/chroot/99-setup-syslinux.hook.chroot
 
 # Binary hook to ensure syslinux files are in place for binary_syslinux stage
 # This runs during the binary phase, before iso creation
 # Debian 13 (trixie) syslinux 6.x: mbr.bin in /usr/lib/SYSLINUX/, ldlinux.c32 in modules/bios/
+# NOTE: Do NOT create /root/isolinux symlink here - it's not needed for binary stage
 mkdir -p config/hooks/binary
 cat > config/hooks/binary/99-ensure-syslinux.hook.binary <<'EOF'
 #!/bin/bash
 set -e
 echo "Ensuring syslinux files for binary stage..."
 mkdir -p /usr/lib/syslinux
-ln -sf /usr/lib/syslinux /root/isolinux
 
 # syslinux 6.x (Debian 13): use mbr.bin as isolinux.bin (hybrid MBR)
 if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
@@ -240,7 +239,6 @@ for f in isolinux.bin vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
   fi
 done
 ls -la /usr/lib/syslinux/
-ls -la /root/isolinux/
 EOF
 chmod +x config/hooks/binary/99-ensure-syslinux.hook.binary
 
