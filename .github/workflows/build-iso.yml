@@ -24,13 +24,6 @@ jobs:
             curl python3 binutils xz-utils \
             syslinux syslinux-common syslinux-utils
 
-      - name: Debug syslinux files
-        run: |
-          echo "=== Checking syslinux files on host ==="
-          ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
-          ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules dir not found"
-          ls -la /usr/share/live/build/bootloaders/ 2>/dev/null || echo "live-build dir not found"
-
       - name: Build ISO
         run: |
           sudo ./build.sh

@@ -446,6 +446,44 @@ systemctl enable cercifaf-shutdown.timer
 EOF
 chmod +x config/hooks/live/99-enable-timers.hook.chroot
 
+# Bootstrap hook to pre-populate /root/isolinux/ in chroot BEFORE package installation
+# This avoids syslinux postinst failure: "cp: cannot stat '/root/isolinux/isolinux.bin'"
+# Bootstrap hooks run on the host and modify the bootstrap tarball
+mkdir -p config/hooks/bootstrap
+cat > config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap <<'EOF'
+#!/bin/bash
+set -e
+echo "Setting up syslinux files in bootstrap tarball..."
+
+# Create the directory structure in the bootstrap tarball
+mkdir -p /root/isolinux
+
+# Copy syslinux files from host (Ubuntu noble) to bootstrap tarball
+# These will be available in chroot before package installation
+if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
+    cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
+    echo "Copied mbr.bin as isolinux.bin to bootstrap"
+fi
+if [ -f "/usr/lib/syslinux/modules/bios/vesamenu.c32" ]; then
+    cp /usr/lib/syslinux/modules/bios/vesamenu.c32 /root/isolinux/
+    echo "Copied vesamenu.c32 to bootstrap"
+fi
+
+# Also copy other needed modules
+for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
+        if [ -f "$src" ]; then
+            cp "$src" /root/isolinux/
+            break
+        fi
+    done
+done
+
+ls -la /root/isolinux/
+echo "Bootstrap syslinux setup complete"
+EOF
+chmod +x config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap
+
 # Hook to clean up .dpkg-new files after chroot package installation
 mkdir -p config/hooks/normal
 cat > config/hooks/normal/99-clean-dpkg-new.hook.chroot <<'EOF'
@@ -588,7 +626,7 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       echo "chown done"
     ' || true
 else
-  # Linux (native) - syslinux files set up by chroot hook during lb build
+  # Linux (native) - syslinux files set up by bootstrap hook during lb build
   echo "Starting live-build (native)..."
   # Verify isohybrid is available (needed for iso-hybrid binary stage)
   if ! which isohybrid >/dev/null 2>&1; then
@@ -597,51 +635,6 @@ else
   fi
   which isohybrid || (echo "isohybrid not found after install!" && exit 1)
   isohybrid --version
-
-  # Pre-populate /root/isolinux/ in chroot BEFORE package installation
-  # This avoids syslinux postinst failure: "cp: cannot stat '/root/isolinux/isolinux.bin'"
-  # Run this on native Linux where apt works (GitHub Actions ubuntu-latest)
-  mkdir -p config/includes.chroot/root/isolinux
-
-  echo "=== Debug: Checking syslinux files on host ==="
-  ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
-  ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules dir not found"
-
-  # Copy syslinux files from installed packages (Ubuntu noble: syslinux 6.x)
-  # syslinux 6.x uses mbr.bin as isolinux.bin for hybrid ISOs
-  if [[ -f /usr/lib/SYSLINUX/mbr.bin ]]; then
-    cp /usr/lib/SYSLINUX/mbr.bin config/includes.chroot/root/isolinux/isolinux.bin
-    echo "Copied mbr.bin as isolinux.bin from installed syslinux"
-  else
-    echo "ERROR: /usr/lib/SYSLINUX/mbr.bin not found"
-  fi
-  if [[ -f /usr/lib/syslinux/modules/bios/vesamenu.c32 ]]; then
-    cp /usr/lib/syslinux/modules/bios/vesamenu.c32 config/includes.chroot/root/isolinux/
-    echo "Copied vesamenu.c32 from installed syslinux-common"
-  else
-    echo "ERROR: /usr/lib/syslinux/modules/bios/vesamenu.c32 not found"
-  fi
-
-  # Fallback: try live-build paths
-  if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]] && [[ -f /usr/share/live/build/bootloaders/isolinux/isolinux.bin ]]; then
-    cp /usr/share/live/build/bootloaders/isolinux/isolinux.bin config/includes.chroot/root/isolinux/
-    echo "Copied isolinux.bin from live-build"
-  fi
-  if [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]] && [[ -f /usr/share/live/build/bootloaders/syslinux_common/vesamenu.c32 ]]; then
-    cp /usr/share/live/build/bootloaders/syslinux_common/vesamenu.c32 config/includes.chroot/root/isolinux/
-    echo "Copied vesamenu.c32 from live-build"
-  fi
-
-  echo "=== Debug: Files in config/includes.chroot/root/isolinux/ ==="
-  ls -la config/includes.chroot/root/isolinux/
-
-  # Verify files exist
-  if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]]; then
-    echo "WARNING: isolinux.bin not found in config/includes.chroot/root/isolinux/"
-  fi
-  if [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]]; then
-    echo "WARNING: vesamenu.c32 not found in config/includes.chroot/root/isolinux/"
-  fi
 
   ./config/auto/config
   ./patch-debootstrap-tar.sh
