@@ -96,7 +96,7 @@ lb config \
   --distribution trixie \
   --architectures amd64 \
   --binary-images iso-hybrid \
-  --bootloader syslinux \
+  --bootloaders syslinux,grub-efi \
   --debian-installer false \
   --archive-areas "main contrib non-free non-free-firmware" \
   --apt-recommends false \
