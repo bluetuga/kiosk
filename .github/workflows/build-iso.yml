@@ -24,6 +24,15 @@ jobs:
             curl python3 binutils xz-utils \
             syslinux syslinux-common syslinux-utils
 
+      - name: Check syslinux paths
+        run: |
+          echo "=== syslinux package contents ==="
+          dpkg -L syslinux | grep -E '\.(bin|c32)$' || true
+          dpkg -L syslinux-common | grep -E '\.(bin|c32)$' || true
+          echo "=== Checking common paths ==="
+          ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
+          ls -la /usr/lib/syslinux/ 2>/dev/null || echo "syslinux dir not found"
+
       - name: Build ISO
         run: |
           sudo ./build.sh
