@@ -88,8 +88,8 @@ if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]] || [[ ! -f confi
   for deb in syslinux_*.deb; do
     [[ -f "$deb" ]] && dpkg-deb -x "$deb" .
   done
-  if [[ -f usr/lib/SYSLINUX/mbr.bin ]] && [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]]; then
-    cp usr/lib/SYSLINUX/mbr.bin config/includes.chroot/root/isolinux/isolinux.bin
+  if [[ -f usr/lib/SYSLINUX/mbr.bin ]] && [[ ! -f "$PROJECT_DIR/config/includes.chroot/root/isolinux/isolinux.bin" ]]; then
+    cp usr/lib/SYSLINUX/mbr.bin "$PROJECT_DIR/config/includes.chroot/root/isolinux/isolinux.bin"
     echo "Extracted mbr.bin as isolinux.bin from syslinux deb"
   fi
 
@@ -97,8 +97,8 @@ if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]] || [[ ! -f confi
   for deb in syslinux-common_*.deb; do
     [[ -f "$deb" ]] && dpkg-deb -x "$deb" .
   done
-  if [[ -f usr/lib/syslinux/modules/bios/vesamenu.c32 ]] && [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]]; then
-    cp usr/lib/syslinux/modules/bios/vesamenu.c32 config/includes.chroot/root/isolinux/
+  if [[ -f usr/lib/syslinux/modules/bios/vesamenu.c32 ]] && [[ ! -f "$PROJECT_DIR/config/includes.chroot/root/isolinux/vesamenu.c32" ]]; then
+    cp usr/lib/syslinux/modules/bios/vesamenu.c32 "$PROJECT_DIR/config/includes.chroot/root/isolinux/"
     echo "Extracted vesamenu.c32 from syslinux-common deb"
   fi
 
