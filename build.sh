@@ -76,29 +76,50 @@ ls -la
 # Create the directory structure in the bootstrap directory (relative paths)
 mkdir -p root/isolinux
 
-# Check what's available on host
+# Check what's available on host - search multiple possible paths
 echo "=== Checking host syslinux paths ==="
 ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
+ls -la /usr/lib/syslinux/ 2>/dev/null || echo "syslinux dir not found"
 ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules/bios dir not found"
+ls -la /usr/share/syslinux/ 2>/dev/null || echo "share/syslinux dir not found"
 
-# Copy syslinux files from host (Ubuntu noble) to bootstrap directory
-# These will be in the bootstrap tarball and available in chroot before package installation
-if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
-    cp /usr/lib/SYSLINUX/mbr.bin root/isolinux/isolinux.bin
-    echo "Copied mbr.bin as isolinux.bin to bootstrap"
+# Find mbr.bin (used as isolinux.bin for hybrid ISOs in syslinux 6.x)
+MBR_BIN=""
+for p in /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/mbr.bin /usr/share/syslinux/mbr.bin; do
+    if [ -f "$p" ]; then
+        MBR_BIN="$p"
+        break
+    fi
+done
+
+# Find vesamenu.c32
+VESAMENU=""
+for p in /usr/lib/syslinux/modules/bios/vesamenu.c32 /usr/lib/syslinux/vesamenu.c32 /usr/share/syslinux/vesamenu.c32; do
+    if [ -f "$p" ]; then
+        VESAMENU="$p"
+        break
+    fi
+done
+
+# Copy mbr.bin as isolinux.bin
+if [ -n "$MBR_BIN" ]; then
+    cp "$MBR_BIN" root/isolinux/isolinux.bin
+    echo "Copied $MBR_BIN as isolinux.bin to bootstrap"
 else
-    echo "WARNING: /usr/lib/SYSLINUX/mbr.bin not found on host"
+    echo "ERROR: mbr.bin not found on host"
 fi
-if [ -f "/usr/lib/syslinux/modules/bios/vesamenu.c32" ]; then
-    cp /usr/lib/syslinux/modules/bios/vesamenu.c32 root/isolinux/
-    echo "Copied vesamenu.c32 to bootstrap"
+
+# Copy vesamenu.c32
+if [ -n "$VESAMENU" ]; then
+    cp "$VESAMENU" root/isolinux/
+    echo "Copied $VESAMENU to bootstrap"
 else
-    echo "WARNING: /usr/lib/syslinux/modules/bios/vesamenu.c32 not found on host"
+    echo "ERROR: vesamenu.c32 not found on host"
 fi
 
 # Also copy other needed modules
 for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
-    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f /usr/lib/syslinux/$f; do
         if [ -f "$src" ]; then
             cp "$src" root/isolinux/
             echo "Copied $f from $src"
