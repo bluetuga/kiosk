@@ -552,10 +552,22 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       apt-get update
 
       # STEP 1: Install syslinux-common FIRST (provides COM32 modules including ldlinux.c32)
-      # This must be before syslinux because syslinux postinst tries to read from /root/isolinux/
       apt-get install -y --no-install-recommends syslinux-common
 
-      # STEP 2: Set up syslinux files BEFORE installing syslinux package
+      # STEP 2: Extract mbr.bin from syslinux .deb BEFORE installing syslinux
+      # (syslinux postinst tries to copy FROM /root/isolinux/isolinux.bin)
+      mkdir -p /tmp/syslinux-extract
+      cd /tmp/syslinux-extract
+      apt-get download syslinux
+      dpkg-deb -x syslinux_*.deb .
+      # mbr.bin is in /usr/lib/SYSLINUX/mbr.bin in the package
+      if [ -f "usr/lib/SYSLINUX/mbr.bin" ]; then
+          cp usr/lib/SYSLINUX/mbr.bin /usr/lib/SYSLINUX/mbr.bin
+          echo "Extracted mbr.bin from syslinux deb"
+      fi
+      cd /workspace
+
+      # STEP 3: Set up syslinux files BEFORE installing syslinux package
       # syslinux postinst tries to copy FROM /root/isolinux/isolinux.bin and /root/isolinux/vesamenu.c32
       mkdir -p /usr/lib/syslinux
       ln -sf /usr/lib/syslinux /root/isolinux
@@ -568,11 +580,14 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
               echo "Pre-copied $f to /usr/lib/syslinux/"
           fi
       done
-      # Use mbr.bin as isolinux.bin (hybrid MBR) - from syslinux package (not installed yet)
-      # We will copy after syslinux install, but postinst needs it NOW
-      # So we need to extract mbr.bin from syslinux .deb manually or install syslinux differently
+      # Pre-copy mbr.bin as isolinux.bin for postinst
+      if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
+          cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
+          cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
+          echo "Pre-copied mbr.bin as isolinux.bin for postinst"
+      fi
 
-      # STEP 3: Install syslinux (postinst will find files in /root/isolinux/)
+      # STEP 4: Install syslinux (postinst will find files in /root/isolinux/)
       apt-get install -y --no-install-recommends syslinux syslinux-utils
 
       # STEP 4: Post-install configuration (ensure all files in place)
