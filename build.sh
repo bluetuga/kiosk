@@ -603,15 +603,23 @@ else
   # Run this on native Linux where apt works (GitHub Actions ubuntu-latest)
   mkdir -p config/includes.chroot/root/isolinux
 
+  echo "=== Debug: Checking syslinux files on host ==="
+  ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
+  ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules dir not found"
+
   # Copy syslinux files from installed packages (Ubuntu noble: syslinux 6.x)
   # syslinux 6.x uses mbr.bin as isolinux.bin for hybrid ISOs
   if [[ -f /usr/lib/SYSLINUX/mbr.bin ]]; then
     cp /usr/lib/SYSLINUX/mbr.bin config/includes.chroot/root/isolinux/isolinux.bin
     echo "Copied mbr.bin as isolinux.bin from installed syslinux"
+  else
+    echo "ERROR: /usr/lib/SYSLINUX/mbr.bin not found"
   fi
   if [[ -f /usr/lib/syslinux/modules/bios/vesamenu.c32 ]]; then
     cp /usr/lib/syslinux/modules/bios/vesamenu.c32 config/includes.chroot/root/isolinux/
     echo "Copied vesamenu.c32 from installed syslinux-common"
+  else
+    echo "ERROR: /usr/lib/syslinux/modules/bios/vesamenu.c32 not found"
   fi
 
   # Fallback: try live-build paths
@@ -623,6 +631,9 @@ else
     cp /usr/share/live/build/bootloaders/syslinux_common/vesamenu.c32 config/includes.chroot/root/isolinux/
     echo "Copied vesamenu.c32 from live-build"
   fi
+
+  echo "=== Debug: Files in config/includes.chroot/root/isolinux/ ==="
+  ls -la config/includes.chroot/root/isolinux/
 
   # Verify files exist
   if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]]; then
