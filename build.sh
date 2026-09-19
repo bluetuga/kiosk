@@ -551,11 +551,12 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       set -x
       apt-get update
 
-      # STEP 1: Install syslinux-common FIRST (provides COM32 modules including ldlinux.c32)
-      apt-get install -y --no-install-recommends syslinux-common
+      # Install syslinux-common and syslinux-utils ONLY (no syslinux package)
+      # syslinux package has problematic postinst that tries to read /root/isolinux/
+      # We will extract needed files from syslinux .deb manually
+      apt-get install -y --no-install-recommends syslinux-common syslinux-utils
 
-      # STEP 2: Extract mbr.bin from syslinux .deb BEFORE installing syslinux
-      # (syslinux postinst tries to copy FROM /root/isolinux/isolinux.bin)
+      # Extract mbr.bin from syslinux .deb manually (without installing the package)
       mkdir -p /tmp/syslinux-extract
       cd /tmp/syslinux-extract
       apt-get download syslinux
@@ -567,54 +568,30 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       fi
       cd /workspace
 
-      # STEP 3: Set up syslinux files BEFORE installing syslinux package
-      # syslinux postinst tries to copy FROM /root/isolinux/isolinux.bin and /root/isolinux/vesamenu.c32
+      # Set up syslinux files for live-build binary stage
       mkdir -p /usr/lib/syslinux
       ln -sf /usr/lib/syslinux /root/isolinux
 
-      # Copy modules from syslinux-common to where syslinux postinst expects them
+      # Copy modules from syslinux-common (already installed)
       # syslinux 6.x (Debian 13): modules are in /usr/lib/syslinux/modules/bios/
       for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
           if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
               cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-              echo "Pre-copied $f to /usr/lib/syslinux/"
+              echo "Copied $f to /usr/lib/syslinux/"
           fi
       done
-      # Pre-copy mbr.bin as isolinux.bin for postinst
+      # Use mbr.bin as isolinux.bin (hybrid MBR)
       if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
           cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
           cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
-          echo "Pre-copied mbr.bin as isolinux.bin for postinst"
-      fi
-
-      # STEP 4: Install syslinux (postinst will find files in /root/isolinux/)
-      apt-get install -y --no-install-recommends syslinux syslinux-utils
-
-      # STEP 4: Post-install configuration (ensure all files in place)
-      # Use mbr.bin as isolinux.bin (hybrid MBR)
-      if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
-          cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
-          echo "Copied /usr/lib/SYSLINUX/mbr.bin -> /usr/lib/syslinux/isolinux.bin"
+          echo "Copied mbr.bin as isolinux.bin"
       fi
       # Use ldlinux.c32 as ldlinux.sys
-      if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
+      if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ]; then
           cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
-          echo "Copied ldlinux.c32 -> /usr/lib/syslinux/ldlinux.sys"
+          cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /root/isolinux/ldlinux.sys
+          echo "Copied ldlinux.c32 as ldlinux.sys"
       fi
-      # Copy COM32 modules
-      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-          if [ -f "/usr/lib/syslinux/modules/bios/$f" ] && [ ! -f "/usr/lib/syslinux/$f" ]; then
-              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-              echo "Copied $f"
-          fi
-      done
-      # Also copy to /root/isolinux
-      cp /usr/lib/syslinux/isolinux.bin /root/isolinux/ 2>/dev/null || true
-      cp /usr/lib/syslinux/ldlinux.sys /root/isolinux/ 2>/dev/null || true
-      cp /usr/lib/syslinux/vesamenu.c32 /root/isolinux/ 2>/dev/null || true
-      cp /usr/lib/syslinux/libcom32.c32 /root/isolinux/ 2>/dev/null || true
-      cp /usr/lib/syslinux/libutil.c32 /root/isolinux/ 2>/dev/null || true
-      cp /usr/lib/syslinux/menu.c32 /root/isolinux/ 2>/dev/null || true
 
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
