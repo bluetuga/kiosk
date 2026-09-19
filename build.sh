@@ -551,15 +551,31 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       set -x
       apt-get update
 
-      # PRE-INSTALL: Set up syslinux files BEFORE installing syslinux package
-      # (syslinux postinst tries to access /root/isolinux)
+      # STEP 1: Install syslinux-common FIRST (provides COM32 modules including ldlinux.c32)
+      # This must be before syslinux because syslinux postinst tries to read from /root/isolinux/
+      apt-get install -y --no-install-recommends syslinux-common
+
+      # STEP 2: Set up syslinux files BEFORE installing syslinux package
+      # syslinux postinst tries to copy FROM /root/isolinux/isolinux.bin and /root/isolinux/vesamenu.c32
       mkdir -p /usr/lib/syslinux
       ln -sf /usr/lib/syslinux /root/isolinux
 
-      # Install syslinux packages for isohybrid
-      apt-get install -y --no-install-recommends syslinux syslinux-common syslinux-utils
+      # Copy modules from syslinux-common to where syslinux postinst expects them
+      # syslinux 6.x (Debian 13): modules are in /usr/lib/syslinux/modules/bios/
+      for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+          if [ -f "/usr/lib/syslinux/modules/bios/$f" ]; then
+              cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
+              echo "Pre-copied $f to /usr/lib/syslinux/"
+          fi
+      done
+      # Use mbr.bin as isolinux.bin (hybrid MBR) - from syslinux package (not installed yet)
+      # We will copy after syslinux install, but postinst needs it NOW
+      # So we need to extract mbr.bin from syslinux .deb manually or install syslinux differently
 
-      # POST-INSTALL: Configure syslinux 6.x files (Debian 13/trixie)
+      # STEP 3: Install syslinux (postinst will find files in /root/isolinux/)
+      apt-get install -y --no-install-recommends syslinux syslinux-utils
+
+      # STEP 4: Post-install configuration (ensure all files in place)
       # Use mbr.bin as isolinux.bin (hybrid MBR)
       if [ -f "/usr/lib/SYSLINUX/mbr.bin" ] && [ ! -f "/usr/lib/syslinux/isolinux.bin" ]; then
           cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
