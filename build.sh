@@ -551,21 +551,31 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
       set -x
       apt-get update
 
-      # Install syslinux-common and syslinux-utils ONLY (no syslinux package)
-      # syslinux package has problematic postinst that tries to read /root/isolinux/
-      # We will extract needed files from syslinux .deb manually
-      apt-get install -y --no-install-recommends syslinux-common syslinux-utils
+      # Install ONLY syslinux-common via apt (provides COM32 modules)
+      # syslinux and syslinux-utils have problematic postinst - extract manually
+      apt-get install -y --no-install-recommends syslinux-common
 
-      # Extract mbr.bin from syslinux .deb manually (without installing the package)
+      # Extract needed files from syslinux .deb and syslinux-utils .deb manually
       mkdir -p /tmp/syslinux-extract
       cd /tmp/syslinux-extract
+
+      # Extract mbr.bin from syslinux .deb
       apt-get download syslinux
       dpkg-deb -x syslinux_*.deb .
-      # mbr.bin is in /usr/lib/SYSLINUX/mbr.bin in the package
       if [ -f "usr/lib/SYSLINUX/mbr.bin" ]; then
           cp usr/lib/SYSLINUX/mbr.bin /usr/lib/SYSLINUX/mbr.bin
           echo "Extracted mbr.bin from syslinux deb"
       fi
+
+      # Extract isohybrid from syslinux-utils .deb
+      apt-get download syslinux-utils
+      dpkg-deb -x syslinux-utils_*.deb .
+      if [ -f "usr/bin/isohybrid" ]; then
+          cp usr/bin/isohybrid /usr/bin/isohybrid
+          chmod +x /usr/bin/isohybrid
+          echo "Extracted isohybrid from syslinux-utils deb"
+      fi
+
       cd /workspace
 
       # Set up syslinux files for live-build binary stage
@@ -593,14 +603,15 @@ if [[ "$BUILD_IN_DOCKER" == true ]]; then
           echo "Copied ldlinux.c32 as ldlinux.sys"
       fi
 
+      # Verify isohybrid is available
+      which isohybrid || (echo "isohybrid not found!" && exit 1)
+      isohybrid --version
+
       # Now install remaining packages
       apt-get install -y --no-install-recommends \
         live-build debootstrap squashfs-tools xorriso \
         mtools dosfstools \
         curl python3 binutils xz-utils qemu-user-static
-      # Verify isohybrid is available (provided by syslinux-utils)
-      which isohybrid || (echo "isohybrid not found!" && exit 1)
-      isohybrid --version
 
       # Force dpkg overwrite for chroot stage (fixes QEMU permission issues)
       mkdir -p /etc/dpkg/dpkg.cfg.d
