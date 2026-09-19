@@ -61,79 +61,6 @@ else
   cp assets/screensaver.mp4 config/includes.chroot/opt/cercifaf/screensaver.mp4
 fi
 
-# Bootstrap hook to pre-populate /root/isolinux/ in bootstrap tarball
-# This runs BEFORE package installation in chroot, avoiding syslinux postinst failure
-# Bootstrap hooks run in the bootstrap directory (becomes chroot root)
-mkdir -p config/hooks/bootstrap
-cat > config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap <<'EOF'
-#!/bin/bash
-set -e
-echo "=== Bootstrap hook: Setting up syslinux files ==="
-echo "Current dir: $(pwd)"
-echo "Bootstrap dir contents:"
-ls -la
-
-# Create the directory structure in the bootstrap directory (relative paths)
-mkdir -p root/isolinux
-
-# Check what's available on host - search multiple possible paths
-echo "=== Checking host syslinux paths ==="
-ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
-ls -la /usr/lib/syslinux/ 2>/dev/null || echo "syslinux dir not found"
-ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules/bios dir not found"
-ls -la /usr/share/syslinux/ 2>/dev/null || echo "share/syslinux dir not found"
-
-# Find mbr.bin (used as isolinux.bin for hybrid ISOs in syslinux 6.x)
-MBR_BIN=""
-for p in /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/mbr.bin /usr/share/syslinux/mbr.bin; do
-    if [ -f "$p" ]; then
-        MBR_BIN="$p"
-        break
-    fi
-done
-
-# Find vesamenu.c32
-VESAMENU=""
-for p in /usr/lib/syslinux/modules/bios/vesamenu.c32 /usr/lib/syslinux/vesamenu.c32 /usr/share/syslinux/vesamenu.c32; do
-    if [ -f "$p" ]; then
-        VESAMENU="$p"
-        break
-    fi
-done
-
-# Copy mbr.bin as isolinux.bin
-if [ -n "$MBR_BIN" ]; then
-    cp "$MBR_BIN" root/isolinux/isolinux.bin
-    echo "Copied $MBR_BIN as isolinux.bin to bootstrap"
-else
-    echo "ERROR: mbr.bin not found on host"
-fi
-
-# Copy vesamenu.c32
-if [ -n "$VESAMENU" ]; then
-    cp "$VESAMENU" root/isolinux/
-    echo "Copied $VESAMENU to bootstrap"
-else
-    echo "ERROR: vesamenu.c32 not found on host"
-fi
-
-# Also copy other needed modules
-for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
-    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f /usr/lib/syslinux/$f; do
-        if [ -f "$src" ]; then
-            cp "$src" root/isolinux/
-            echo "Copied $f from $src"
-            break
-        fi
-    done
-done
-
-echo "=== Bootstrap root/isolinux/ contents ==="
-ls -la root/isolinux/
-echo "Bootstrap syslinux setup complete"
-EOF
-chmod +x config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap
-
 # Package list
 cat > config/package-lists/cercifaf.list.chroot <<'EOF'
 systemd
@@ -631,6 +558,57 @@ test -f config/includes.chroot/opt/cercifaf/wallpaper.png
 # (lb_chroot_linux-image downloads this to find kernel packages; 404 on trixie)
 mkdir -p cache/binary_debian-installer
 echo "dummy" | gzip > cache/binary_debian-installer/Contents-amd64.gz
+
+# Create config/includes.bootstrap/ to pre-populate /root/isolinux/ in bootstrap tarball
+# This directory is copied to the bootstrap tarball by live-build
+# Must be created before lb build runs
+echo "=== Creating config/includes.bootstrap/root/isolinux/ ==="
+mkdir -p config/includes.bootstrap/root/isolinux
+
+# Find and copy syslinux files from host (Ubuntu noble)
+MBR_BIN=""
+for p in /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/mbr.bin /usr/share/syslinux/mbr.bin; do
+    if [ -f "$p" ]; then
+        MBR_BIN="$p"
+        break
+    fi
+done
+
+VESAMENU=""
+for p in /usr/lib/syslinux/modules/bios/vesamenu.c32 /usr/lib/syslinux/vesamenu.c32 /usr/share/syslinux/vesamenu.c32; do
+    if [ -f "$p" ]; then
+        VESAMENU="$p"
+        break
+    fi
+done
+
+if [ -n "$MBR_BIN" ]; then
+    cp "$MBR_BIN" config/includes.bootstrap/root/isolinux/isolinux.bin
+    echo "Copied $MBR_BIN as isolinux.bin to includes.bootstrap"
+else
+    echo "ERROR: mbr.bin not found on host"
+fi
+
+if [ -n "$VESAMENU" ]; then
+    cp "$VESAMENU" config/includes.bootstrap/root/isolinux/
+    echo "Copied $VESAMENU to includes.bootstrap"
+else
+    echo "ERROR: vesamenu.c32 not found on host"
+fi
+
+# Also copy other needed modules
+for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f /usr/lib/syslinux/$f; do
+        if [ -f "$src" ]; then
+            cp "$src" config/includes.bootstrap/root/isolinux/
+            echo "Copied $f from $src"
+            break
+        fi
+    done
+done
+
+echo "=== config/includes.bootstrap/root/isolinux/ contents ==="
+ls -la config/includes.bootstrap/root/isolinux/
 
 # Build phase
 if [[ "$BUILD_IN_DOCKER" == true ]]; then
