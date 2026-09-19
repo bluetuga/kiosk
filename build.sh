@@ -61,6 +61,44 @@ else
   cp assets/screensaver.mp4 config/includes.chroot/opt/cercifaf/screensaver.mp4
 fi
 
+# Bootstrap hook to pre-populate /root/isolinux/ in bootstrap tarball
+# This runs BEFORE package installation in chroot, avoiding syslinux postinst failure
+# Bootstrap hooks run in the bootstrap directory (becomes chroot root)
+mkdir -p config/hooks/bootstrap
+cat > config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap <<'EOF'
+#!/bin/bash
+set -e
+echo "Setting up syslinux files in bootstrap tarball..."
+
+# Create the directory structure in the bootstrap directory (relative paths)
+mkdir -p root/isolinux
+
+# Copy syslinux files from host (Ubuntu noble) to bootstrap directory
+# These will be in the bootstrap tarball and available in chroot before package installation
+if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
+    cp /usr/lib/SYSLINUX/mbr.bin root/isolinux/isolinux.bin
+    echo "Copied mbr.bin as isolinux.bin to bootstrap"
+fi
+if [ -f "/usr/lib/syslinux/modules/bios/vesamenu.c32" ]; then
+    cp /usr/lib/syslinux/modules/bios/vesamenu.c32 root/isolinux/
+    echo "Copied vesamenu.c32 to bootstrap"
+fi
+
+# Also copy other needed modules
+for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
+    for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
+        if [ -f "$src" ]; then
+            cp "$src" root/isolinux/
+            break
+        fi
+    done
+done
+
+ls -la root/isolinux/
+echo "Bootstrap syslinux setup complete"
+EOF
+chmod +x config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap
+
 # Package list
 cat > config/package-lists/cercifaf.list.chroot <<'EOF'
 systemd
