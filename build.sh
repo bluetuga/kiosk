@@ -636,7 +636,11 @@ else
   # Linux (native) - syslinux files set up by chroot hook during lb build
   echo "Starting live-build (native)..."
   # Verify isohybrid is available (needed for iso-hybrid binary stage)
-  which isohybrid || (echo "isohybrid not found! Install syslinux-utils" && exit 1)
+  if ! which isohybrid >/dev/null 2>&1; then
+    echo "isohybrid not found, installing syslinux-utils..."
+    apt-get update && apt-get install -y --no-install-recommends syslinux-utils
+  fi
+  which isohybrid || (echo "isohybrid not found after install!" && exit 1)
   isohybrid --version
   ./config/auto/config
   ./patch-debootstrap-tar.sh
