@@ -68,20 +68,32 @@ mkdir -p config/hooks/bootstrap
 cat > config/hooks/bootstrap/99-setup-syslinux.hook.bootstrap <<'EOF'
 #!/bin/bash
 set -e
-echo "Setting up syslinux files in bootstrap tarball..."
+echo "=== Bootstrap hook: Setting up syslinux files ==="
+echo "Current dir: $(pwd)"
+echo "Bootstrap dir contents:"
+ls -la
 
 # Create the directory structure in the bootstrap directory (relative paths)
 mkdir -p root/isolinux
+
+# Check what's available on host
+echo "=== Checking host syslinux paths ==="
+ls -la /usr/lib/SYSLINUX/ 2>/dev/null || echo "SYSLINUX dir not found"
+ls -la /usr/lib/syslinux/modules/bios/ 2>/dev/null || echo "syslinux modules/bios dir not found"
 
 # Copy syslinux files from host (Ubuntu noble) to bootstrap directory
 # These will be in the bootstrap tarball and available in chroot before package installation
 if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
     cp /usr/lib/SYSLINUX/mbr.bin root/isolinux/isolinux.bin
     echo "Copied mbr.bin as isolinux.bin to bootstrap"
+else
+    echo "WARNING: /usr/lib/SYSLINUX/mbr.bin not found on host"
 fi
 if [ -f "/usr/lib/syslinux/modules/bios/vesamenu.c32" ]; then
     cp /usr/lib/syslinux/modules/bios/vesamenu.c32 root/isolinux/
     echo "Copied vesamenu.c32 to bootstrap"
+else
+    echo "WARNING: /usr/lib/syslinux/modules/bios/vesamenu.c32 not found on host"
 fi
 
 # Also copy other needed modules
@@ -89,11 +101,13 @@ for f in libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
     for src in /usr/share/syslinux/$f /usr/lib/ISOLINUX/$f /usr/lib/syslinux/modules/bios/$f /usr/lib/syslinux/bios/$f; do
         if [ -f "$src" ]; then
             cp "$src" root/isolinux/
+            echo "Copied $f from $src"
             break
         fi
     done
 done
 
+echo "=== Bootstrap root/isolinux/ contents ==="
 ls -la root/isolinux/
 echo "Bootstrap syslinux setup complete"
 EOF
