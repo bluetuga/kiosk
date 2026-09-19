@@ -61,6 +61,59 @@ else
   cp assets/screensaver.mp4 config/includes.chroot/opt/cercifaf/screensaver.mp4
 fi
 
+# Pre-populate /root/isolinux/ in chroot BEFORE package installation
+# This avoids syslinux postinst failure: "cp: cannot stat '/root/isolinux/isolinux.bin'"
+mkdir -p config/includes.chroot/root/isolinux
+
+# Try to get syslinux files from live-build first (if available locally)
+if [[ -f /usr/share/live/build/bootloaders/isolinux/isolinux.bin ]]; then
+  cp /usr/share/live/build/bootloaders/isolinux/isolinux.bin config/includes.chroot/root/isolinux/
+  echo "Copied isolinux.bin from live-build"
+fi
+if [[ -f /usr/share/live/build/bootloaders/syslinux_common/vesamenu.c32 ]]; then
+  cp /usr/share/live/build/bootloaders/syslinux_common/vesamenu.c32 config/includes.chroot/root/isolinux/
+  echo "Copied vesamenu.c32 from live-build"
+fi
+
+# If live-build files not available, download and extract from Debian packages
+if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]] || [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]]; then
+  echo "Live-build files not found locally, extracting from Debian packages..."
+  mkdir -p /tmp/syslinux-extract
+  cd /tmp/syslinux-extract
+
+  # Download packages (using Debian trixie repo)
+  apt-get download syslinux syslinux-common 2>/dev/null || true
+
+  # Extract isolinux.bin (from syslinux package - provides mbr.bin which works as isolinux.bin for hybrid)
+  for deb in syslinux_*.deb; do
+    [[ -f "$deb" ]] && dpkg-deb -x "$deb" .
+  done
+  if [[ -f usr/lib/SYSLINUX/mbr.bin ]] && [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]]; then
+    cp usr/lib/SYSLINUX/mbr.bin config/includes.chroot/root/isolinux/isolinux.bin
+    echo "Extracted mbr.bin as isolinux.bin from syslinux deb"
+  fi
+
+  # Extract vesamenu.c32 from syslinux-common
+  for deb in syslinux-common_*.deb; do
+    [[ -f "$deb" ]] && dpkg-deb -x "$deb" .
+  done
+  if [[ -f usr/lib/syslinux/modules/bios/vesamenu.c32 ]] && [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]]; then
+    cp usr/lib/syslinux/modules/bios/vesamenu.c32 config/includes.chroot/root/isolinux/
+    echo "Extracted vesamenu.c32 from syslinux-common deb"
+  fi
+
+  cd "$PROJECT_DIR"
+  rm -rf /tmp/syslinux-extract
+fi
+
+# Verify files exist
+if [[ ! -f config/includes.chroot/root/isolinux/isolinux.bin ]]; then
+  echo "WARNING: isolinux.bin not found in config/includes.chroot/root/isolinux/"
+fi
+if [[ ! -f config/includes.chroot/root/isolinux/vesamenu.c32 ]]; then
+  echo "WARNING: vesamenu.c32 not found in config/includes.chroot/root/isolinux/"
+fi
+
 # Package list
 cat > config/package-lists/cercifaf.list.chroot <<'EOF'
 systemd
@@ -457,51 +510,6 @@ find / -name "*.dpkg-new" -exec rm -f {} \; 2>/dev/null || true
 echo "Finished 99-clean-dpkg-new hook"
 EOF
 chmod +x config/hooks/normal/99-clean-dpkg-new.hook.chroot
-
-# Hook to set up syslinux files EARLY during package installation (before syslinux postinst)
-# Priority 00- runs before most packages including syslinux
-mkdir -p config/hooks/normal
-cat > config/hooks/normal/00-setup-syslinux-for-postinst.hook.chroot <<'EOF'
-#!/bin/bash
-set -e
-echo "Setting up syslinux files for postinst (early hook)..."
-mkdir -p /usr/lib/syslinux
-mkdir -p /root/isolinux
-
-# Debian 13 (trixie) syslinux 6.x: extract files from packages that may already be installed
-# Check if syslinux-common was already installed (provides modules)
-if [ -d "/usr/lib/syslinux/modules/bios" ]; then
-    for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32 ldlinux.c32; do
-        if [ -f "/usr/lib/syslinux/modules/bios/$f" ] && [ ! -f "/usr/lib/syslinux/$f" ]; then
-            cp "/usr/lib/syslinux/modules/bios/$f" /usr/lib/syslinux/
-        fi
-    done
-fi
-
-# Check if syslinux was already installed (provides mbr.bin)
-if [ -f "/usr/lib/SYSLINUX/mbr.bin" ]; then
-    cp /usr/lib/SYSLINUX/mbr.bin /usr/lib/syslinux/isolinux.bin
-    cp /usr/lib/SYSLINUX/mbr.bin /root/isolinux/isolinux.bin
-fi
-
-# Also copy ldlinux.c32 as ldlinux.sys if available
-if [ -f "/usr/lib/syslinux/modules/bios/ldlinux.c32" ] && [ ! -f "/usr/lib/syslinux/ldlinux.sys" ]; then
-    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/ldlinux.sys
-    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /root/isolinux/ldlinux.sys
-fi
-
-# Copy modules to /root/isolinux for syslinux postinst
-for f in vesamenu.c32 libcom32.c32 libutil.c32 menu.c32; do
-    if [ -f "/usr/lib/syslinux/$f" ] && [ ! -f "/root/isolinux/$f" ]; then
-        cp "/usr/lib/syslinux/$f" /root/isolinux/
-    fi
-done
-
-echo "Early syslinux setup complete"
-ls -la /usr/lib/syslinux/
-ls -la /root/isolinux/
-EOF
-chmod +x config/hooks/normal/00-setup-syslinux-for-postinst.hook.chroot
 
 # Hook to configure locale and timezone
 mkdir -p config/hooks/chroot
