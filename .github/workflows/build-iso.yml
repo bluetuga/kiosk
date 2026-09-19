@@ -22,7 +22,7 @@ jobs:
             live-build debootstrap squashfs-tools xorriso \
             mtools dosfstools \
             curl python3 binutils xz-utils \
-            syslinux-utils
+            syslinux syslinux-common syslinux-utils
 
       - name: Build ISO
         run: |
